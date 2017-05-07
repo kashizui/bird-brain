@@ -73,9 +73,9 @@ class CTCModel():
         seq_lens_placeholder = None
 
         ### YOUR CODE HERE (~3 lines)
-
-
-
+        inputs_placeholder = tf.placeholder(tf.float32, shape=[None, None, num_final_features])
+        target_placeholder = tf.placeholder(tf.int32)
+        seq_lens_placeholder = tf.placeholder(tf.int32, shape=[None])
         ### END YOUR CODE
 
         self.inputs_placeholder = inputs_placeholder
@@ -106,9 +106,11 @@ class CTCModel():
         feed_dict = {}
 
         ### YOUR CODE HERE (~3-4 lines)
-
-
-
+        return {
+            self.inputs_placeholder: inputs_batch,
+            self.target_placeholder: targets_batch,
+            self.seq_lens_placeholder: seq_lens_batch,
+        }
         ### END YOUR CODE
 
         return feed_dict
@@ -132,13 +134,22 @@ class CTCModel():
         logits = None
 
         ### YOUR CODE HERE (~10-15 lines)
+        # outputs.shape = [batch_s, max_timestep, num_hidden]
+        gru = tf.contrib.rnn.GRUCell(Config.num_hidden)
+        outputs, last_states = tf.nn.dynamic_rnn(
+            cell=gru,
+            inputs=self.inputs_placeholder,
+            dtype=tf.float64,
+            sequence_length=self.seq_lens_placeholder,
+        )
 
+        self.W = tf.get_variable('W', shape=[Config.num_hidden, Config.num_classes],
+           initializer=tf.contrib.layers.xavier_initializer())
+        self.b = tf.get_variable('b', shape=[Config.num_classes],
+           initializer=tf.contrib.layers.xavier_initializer())
 
-
-
-
-
-
+        # logits.shape = [batch_s, max_timestep, num_classes]
+        logits = tf.matmul(outputs, self.W) + self.b
         ### END YOUR CODE
 
         self.logits = logits
@@ -160,11 +171,18 @@ class CTCModel():
         l2_cost = 0.0
 
         ### YOUR CODE HERE (~6-8 lines)
+        # logitsT.shape = [max_timesteps, batch_s, num_classes]
+        self.logitsT = tf.transpose(self.logits, perm=[1, 0, 2])
 
+        ctc_loss = tf.nn.ctc_loss(
+            labels=self.targets_placeholder,
+            inputs=self.logitsT,
+            sequence_length=self.seq_lens_placeholder,
+            preprocess_collapse_repeated=False,  # FIXME?
+            ctc_merge_repeated=True,
+        )
 
-
-
-
+        l2_cost = tf.nn.l2_loss(self.W)
         ### END YOUR CODE
 
         # Remove inf cost training examples (no path found, yet)
@@ -190,7 +208,8 @@ class CTCModel():
         optimizer = None
 
         ### YOUR CODE HERE (~1-2 lines)
-
+        optimizer = tf.train.AdamOptimizer()
+        optimizer.minimize(self.loss)
         ### END YOUR CODE
 
         self.optimizer = optimizer
@@ -206,9 +225,15 @@ class CTCModel():
         wer = None
 
         ### YOUR CODE HERE (~2-3 lines)
-
-
-
+        decoded_sequence = tf.nn.ctc_beam_search_decoder(
+            self.logitsT,
+            self.seq_lens_placeholder,
+        )
+        wer = tf.reduce_mean(tf.edit_distance(
+            hypothesis=decoded_sequence,
+            truth=self.targets_placeholder,
+            normalize=True,
+        ))
         ### END YOUR CODE
 
         tf.summary.scalar("loss", self.loss)
@@ -219,7 +244,6 @@ class CTCModel():
 
     def add_summary_op(self):
         self.merged_summary_op = tf.summary.merge_all()
-
 
     # This actually builds the computational graph
     def build(self):
