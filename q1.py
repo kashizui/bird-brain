@@ -72,6 +72,9 @@ class CTC(object):
         ######################
         # Normalize by softmax
         normalized_logits = softmax(logits, axis=1)
+        print logits
+        print normalized_logits
+        exit()
         alpha = self.compute_forward_variables(normalized_logits, target)
 
         # Compute forward or backward pass and cost
@@ -142,6 +145,8 @@ class CTC(object):
                     alpha[s, t] = (alpha_bar + alpha[s-2, t-1]) * normalized_logits[t, target[target_idx]]
                 touched[s, t] = 1
 
+            print alpha
+            time.sleep(1)
             display(touched)
 
         return alpha[:S_MAX, :]
@@ -280,39 +285,39 @@ if __name__ == "__main__":
 
     ctc_instance = CTC()
 
-    t_sample = np.array([0, 3, 1, 2, 0], dtype=np.int32)
-    inp_sample = np.array(
-        [[0.111121, 0.588392, 0.278779, 0.0055756, 0.00569609, 0.010436],
-        [0.633766, 0.221185, 0.0917319, 0.0129757, 0.0142857, 0.0260553],
-        [0.0357786, 0.633813, 0.321418, 0.00249248, 0.00272882, 0.0037688],
-        [0.0663296, 0.643849, 0.280111, 0.00283995, 0.0035545, 0.00331533],
-        [0.458235, 0.396634, 0.123377, 0.00648837, 0.00903441, 0.00623107]])
-    print("----------------------\nCTC loss on sample input:\nCalculated = %f\nExpected = %f" % (ctc_instance.compute_ctc_loss(inp_sample, t_sample), 8.4266024))
+    # t_sample = np.array([0, 3, 1, 2, 0], dtype=np.int32)
+    # inp_sample = np.array(
+    #     [[0.111121, 0.588392, 0.278779, 0.0055756, 0.00569609, 0.010436],
+    #     [0.633766, 0.221185, 0.0917319, 0.0129757, 0.0142857, 0.0260553],
+    #     [0.0357786, 0.633813, 0.321418, 0.00249248, 0.00272882, 0.0037688],
+    #     [0.0663296, 0.643849, 0.280111, 0.00283995, 0.0035545, 0.00331533],
+    #     [0.458235, 0.396634, 0.123377, 0.00648837, 0.00903441, 0.00623107]])
+    # print("----------------------\nCTC loss on sample input:\nCalculated = %f\nExpected = %f" % (ctc_instance.compute_ctc_loss(inp_sample, t_sample), 8.4266024))
 
-    expected_gradient_sample = np.array([[-0.84611112,  0.24801813,  0.18197855,  0.13847439,  0.13849108,  0.13914907],
-        [ 0.25880966,  0.17131636,  0.15051439, -0.86088479,  0.13929759,  0.14094676],
-        [ 0.14179565, -0.7421388,   0.18867508,  0.13715352,  0.13718593,  0.13732868],
-        [ 0.14627296,  0.26060188, -0.81886262,  0.13727479,  0.13737293,  0.13734008],
-        [-0.78102362,  0.20589428,  0.15666439,  0.13938184,  0.13973717,  0.13934597]])
-    print("\nCTC loss gradient w.r.t. unnormalized sample input:\nCalculated =")
-    print(ctc_instance.compute_gradients(inp_sample, t_sample))
-    print("\nExpected = ")
-    print(expected_gradient_sample)
+    # expected_gradient_sample = np.array([[-0.84611112,  0.24801813,  0.18197855,  0.13847439,  0.13849108,  0.13914907],
+    #     [ 0.25880966,  0.17131636,  0.15051439, -0.86088479,  0.13929759,  0.14094676],
+    #     [ 0.14179565, -0.7421388,   0.18867508,  0.13715352,  0.13718593,  0.13732868],
+    #     [ 0.14627296,  0.26060188, -0.81886262,  0.13727479,  0.13737293,  0.13734008],
+    #     [-0.78102362,  0.20589428,  0.15666439,  0.13938184,  0.13973717,  0.13934597]])
+    # print("\nCTC loss gradient w.r.t. unnormalized sample input:\nCalculated =")
+    # print(ctc_instance.compute_gradients(inp_sample, t_sample))
+    # print("\nExpected = ")
+    # print(expected_gradient_sample)
 
-    print('\n----------------------\n')
+    # print('\n----------------------\n')
 
-    t1 = np.array([0, 1, 1, 0], dtype=np.int32)
-    inp1 = np.asarray(
-        [[0.30176, 0.28562, 0.0831517, 0.0862751, 0.0816851, 0.161508],
-         [0.24082, 0.397533, 0.0557226, 0.0546814, 0.0557528, 0.19549],
-         [0.230246, 0.450868, 0.0389607, 0.038309, 0.0391602, 0.202456],
-         [0.280884, 0.429522, 0.0326593, 0.0339046, 0.0326856, 0.190345],
-         [0.423286, 0.315517, 0.0338439, 0.0393744, 0.0339315, 0.154046]],
-        dtype=np.float32)
+    # t1 = np.array([0, 1, 1, 0], dtype=np.int32)
+    # inp1 = np.asarray(
+    #     [[0.30176, 0.28562, 0.0831517, 0.0862751, 0.0816851, 0.161508],
+    #      [0.24082, 0.397533, 0.0557226, 0.0546814, 0.0557528, 0.19549],
+    #      [0.230246, 0.450868, 0.0389607, 0.038309, 0.0391602, 0.202456],
+    #      [0.280884, 0.429522, 0.0326593, 0.0339046, 0.0326856, 0.190345],
+    #      [0.423286, 0.315517, 0.0338439, 0.0393744, 0.0339315, 0.154046]],
+    #     dtype=np.float32)
 
-    print("CTC loss on input 1: %f" % ctc_instance.compute_ctc_loss(inp1, t1))
-    print("CTC loss gradient w.r.t. unnormalized input 1:")
-    print(ctc_instance.compute_gradients(inp1, t1))
+    # print("CTC loss on input 1: %f" % ctc_instance.compute_ctc_loss(inp1, t1))
+    # print("CTC loss gradient w.r.t. unnormalized input 1:")
+    # print(ctc_instance.compute_gradients(inp1, t1))
 
     t2 = np.array([0, 1, 2, 1, 0], dtype=np.int32)
     inp2 = np.array([[ -8.,  23.,  -5.,   7.,  17.,  -9.],

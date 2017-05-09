@@ -73,8 +73,8 @@ class CTCModel():
         seq_lens_placeholder = None
 
         ### YOUR CODE HERE (~3 lines)
-        inputs_placeholder = tf.placeholder(tf.float32, shape=[None, None, num_final_features])
-        target_placeholder = tf.placeholder(tf.int32)
+        inputs_placeholder = tf.placeholder(tf.float32, shape=[None, None, Config.num_final_features])
+        targets_placeholder = tf.sparse_placeholder(tf.int32)
         seq_lens_placeholder = tf.placeholder(tf.int32, shape=[None])
         ### END YOUR CODE
 
@@ -108,7 +108,7 @@ class CTCModel():
         ### YOUR CODE HERE (~3-4 lines)
         return {
             self.inputs_placeholder: inputs_batch,
-            self.target_placeholder: targets_batch,
+            self.targets_placeholder: targets_batch,
             self.seq_lens_placeholder: seq_lens_batch,
         }
         ### END YOUR CODE
@@ -139,7 +139,7 @@ class CTCModel():
         outputs, last_states = tf.nn.dynamic_rnn(
             cell=gru,
             inputs=self.inputs_placeholder,
-            dtype=tf.float64,
+            dtype=tf.float32,
             sequence_length=self.seq_lens_placeholder,
         )
 
@@ -148,8 +148,13 @@ class CTCModel():
         self.b = tf.get_variable('b', shape=[Config.num_classes],
            initializer=tf.contrib.layers.xavier_initializer())
 
+        # outputs_flat.shape = [batch_s*max_timestep, num_hidden]
+        outputs_shape = tf.shape(outputs)
+        outputs_flat = tf.reshape(outputs, [-1, Config.num_hidden])
+        # logits_flat.shape = [batch_s*max_timestep, num_classes]
+        logits_flat = tf.matmul(outputs_flat, self.W) + self.b
         # logits.shape = [batch_s, max_timestep, num_classes]
-        logits = tf.matmul(outputs, self.W) + self.b
+        logits = tf.reshape(logits_flat, [outputs_shape[0], outputs_shape[1], Config.num_classes])  # FIXME?
         ### END YOUR CODE
 
         self.logits = logits
@@ -208,8 +213,7 @@ class CTCModel():
         optimizer = None
 
         ### YOUR CODE HERE (~1-2 lines)
-        optimizer = tf.train.AdamOptimizer()
-        optimizer.minimize(self.loss)
+        optimizer = tf.train.AdamOptimizer().minimize(self.loss)
         ### END YOUR CODE
 
         self.optimizer = optimizer
@@ -225,10 +229,12 @@ class CTCModel():
         wer = None
 
         ### YOUR CODE HERE (~2-3 lines)
-        decoded_sequence = tf.nn.ctc_beam_search_decoder(
+        result = tf.nn.ctc_beam_search_decoder(
             self.logitsT,
             self.seq_lens_placeholder,
+            top_paths=1,
         )
+        decoded_sequence = tf.to_int32(result[0][0])
         wer = tf.reduce_mean(tf.edit_distance(
             hypothesis=decoded_sequence,
             truth=self.targets_placeholder,
