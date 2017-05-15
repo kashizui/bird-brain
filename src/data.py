@@ -7,18 +7,25 @@ import numpy as np
 from string import ascii_lowercase
 from string import punctuation
 
-num_classes = 28 # 26 characters, space, blank
+num_classes = 28  # 26 characters, space, blank
 str_to_index = {}
+
 
 def make_train(path):
     train_path = os.path.join(path, "train")
-    train_output = "data/train/train.dat"
+    train_output_dir = 'data/train'
+    os.makedirs(train_output_dir, exist_ok=True)
+    train_output = os.path.join(train_output_dir, 'train.dat')
     make_dataset(train_path, train_output)
-    
+   
+
 def make_test(path):
     test_path = os.path.join(path, "test")
-    test_output = "data/test/test.dat"
+    test_output_dir = 'data/test'
+    os.makedirs(test_output_dir, exist_ok=True)
+    test_output = os.path.join(test_output_dir, 'test.dat')
     make_dataset(test_path, test_output)
+
 
 def make_dataset(path, output):
     l1 = []
@@ -38,16 +45,19 @@ def make_dataset(path, output):
     with open(output, "wb") as f:
         pickle.dump(dataset, f)
 
+
 def get_label(path):
     with open(path, "r") as f:
         line = f.readline().strip()
-        line = line.translate(line.maketrans('','',punctuation))
+        line = line.translate(line.maketrans('', '', punctuation))
         split_line = line.split(" ")[2:]
         label_string = " ".join(split_line).lower()
         return string_to_index_mapping(label_string)
 
+
 def string_to_index_mapping(label_string):
     return [str_to_index[c] for c in label_string]
+
 
 def construct_string_to_index_mapping():
     str_to_index = {}
@@ -58,8 +68,10 @@ def construct_string_to_index_mapping():
     str_to_index["_"] = ord("z") - offset + 2
     return str_to_index
 
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Extracts MFCC features from corpus")
+    parser = argparse.ArgumentParser(
+        description="Extracts MFCC features from corpus")
     parser.add_argument("corpus_path", type=str, help="Path to corpus")
     args = parser.parse_args()
     str_to_index = construct_string_to_index_mapping()
