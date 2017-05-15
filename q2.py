@@ -26,11 +26,11 @@ class Config:
     instantiation.
     """
     context_size = 0
-    num_mfcc_features = 13
+    num_mfcc_features = 24
     num_final_features = num_mfcc_features * (2 * context_size + 1)
 
     batch_size = 16
-    num_classes = 12 # 11 (TIDIGITS - 0-9 + oh) + 1 (blank) = 12
+    num_classes = 28 # 11 (TIDIGITS - 0-9 + oh) + 1 (blank) = 12
     num_hidden = 128
 
     num_epochs = 50
@@ -283,8 +283,8 @@ class CTCModel():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--train_path', nargs='?', default='./data/hw3_train.dat', type=str, help="Give path to training data - this should not need to be changed if you are running from the assignment directory")
-    parser.add_argument('--val_path', nargs='?', default='./data/hw3_val.dat', type=str, help="Give path to val data - this should not need to be changed if you are running from the assignment directory")
+    parser.add_argument('--train_path', nargs='?', default='./data/train/train.dat', type=str, help="Give path to training data - this should not need to be changed if you are running from the assignment directory")
+    parser.add_argument('--val_path', nargs='?', default='./data/test/test.dat', type=str, help="Give path to val data - this should not need to be changed if you are running from the assignment directory")
     parser.add_argument('--save_every', nargs='?', default=None, type=int, help="Save model every x iterations. Default is not saving at all.")
     parser.add_argument('--print_every', nargs='?', default=10, type=int, help="Print some training and val examples (true and predicted sequences) every x iterations. Default is 10")
     parser.add_argument('--save_to_file', nargs='?', default='saved_models/saved_model_epoch', type=str, help="Provide filename prefix for saving intermediate models")
@@ -301,9 +301,9 @@ if __name__ == "__main__":
     val_feature_minibatches, val_labels_minibatches, val_seqlens_minibatches = make_batches(train_dataset, batch_size=len(val_dataset[0]))
 
     def pad_all_batches(batch_feature_array):
-    	for batch_num in range(len(batch_feature_array)):
-    		batch_feature_array[batch_num] = pad_sequences(batch_feature_array[batch_num])[0]
-    	return batch_feature_array
+        for batch_num in range(len(batch_feature_array)):
+            batch_feature_array[batch_num] = pad_sequences(batch_feature_array[batch_num])[0]
+        return batch_feature_array
 
     train_feature_minibatches = pad_all_batches(train_feature_minibatches)
     val_feature_minibatches = pad_all_batches(val_feature_minibatches)
@@ -321,7 +321,7 @@ if __name__ == "__main__":
             # Initializate the weights and biases
             session.run(init)
             if args.load_from_file is not None:
-            	new_saver = tf.train.import_meta_graph('%s.meta'%args.load_from_file, clear_devices=True)
+                new_saver = tf.train.import_meta_graph('%s.meta'%args.load_from_file, clear_devices=True)
                 new_saver.restore(session, args.load_from_file)
 
             train_writer = tf.summary.FileWriter(logs_path + '/train', session.graph)
@@ -358,4 +358,4 @@ if __name__ == "__main__":
                     model.print_results(train_feature_minibatches[batch_ii], train_labels_minibatches[batch_ii], train_seqlens_minibatches[batch_ii])
 
                 if args.save_every is not None and args.save_to_file is not None and (curr_epoch + 1) % args.save_every == 0:
-                	saver.save(session, args.save_to_file, global_step=curr_epoch + 1)
+                    saver.save(session, args.save_to_file, global_step=curr_epoch + 1)
