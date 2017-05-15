@@ -48,16 +48,18 @@ def string_to_index_mapping(label_string):
     return [str_to_index[c] for c in label_string]
 
 def construct_mapping():
+    str_to_index = {}
     offset = ord("a")
     for c in ascii_lowercase:
         str_to_index[c] = ord(c) - offset
     str_to_index[" "] = ord("z") - offset + 1
     str_to_index["_"] = ord("z") - offset + 2
+    return str_to_index
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Extracts MFCC features from corpus")
     parser.add_argument("corpus_path", type=str, help="Path to corpus")
     args = parser.parse_args()
-    construct_mapping()
+    str_to_index = construct_mapping()
     make_train(args.corpus_path)
     make_test(args.corpus_path)
