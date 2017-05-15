@@ -1,4 +1,4 @@
-FROM tensorflow/tensorflow:1.1.0
+FROM tensorflow/tensorflow:1.1.0-py3
 LABEL maintainer "sckoo@cs.stanford.edu"
 
 ADD requirements.txt requirements.txt

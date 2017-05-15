@@ -26,14 +26,16 @@ def sparse_tuple_from(sequences, dtype=np.int32):
     values = []
 
     for n, seq in enumerate(sequences):
-        indices.extend(zip([n]*len(seq), range(len(seq))))
+        indices.extend(zip([n] * len(seq), range(len(seq))))
         values.extend(seq)
 
     indices = np.asarray(indices, dtype=np.int64)
     values = np.asarray(values, dtype=dtype)
-    shape = np.asarray([len(sequences), np.asarray(indices).max(0)[1]+1], dtype=np.int64)
+    shape = np.asarray([len(sequences), np.asarray(indices).max(0)[1] + 1],
+                       dtype=np.int64)
 
     return indices, values, shape
+
 
 def pad_sequences(sequences, maxlen=None, dtype=np.float32,
                   padding='post', truncating='post', value=0.):
@@ -84,8 +86,9 @@ def pad_sequences(sequences, maxlen=None, dtype=np.float32,
         # check `trunc` has expected shape
         trunc = np.asarray(trunc, dtype=dtype)
         if trunc.shape[1:] != sample_shape:
-            raise ValueError('Shape of sample %s of sequence at position %s is different from expected shape %s' %
-                             (trunc.shape[1:], idx, sample_shape))
+            raise ValueError(
+                'Shape of sample %s of sequence at position %s is different from expected shape %s' %
+                (trunc.shape[1:], idx, sample_shape))
 
         if padding == 'post':
             x[idx, :len(trunc)] = trunc
@@ -95,22 +98,30 @@ def pad_sequences(sequences, maxlen=None, dtype=np.float32,
             raise ValueError('Padding type "%s" not understood' % padding)
     return x, lengths
 
+
 def compare_predicted_to_true(preds, trues_tup):
-    inv_index_mapping = {v: k for k, v in construct_string_to_index_mapping().items()}        
+    inv_index_mapping = {v: k for k, v in
+                         construct_string_to_index_mapping().items()}
 
     preds = tf.sparse_tensor_to_dense(preds, default_value=-1).eval()
-    trues = tf.sparse_tensor_to_dense(tf.SparseTensor(indices=trues_tup[0], values=trues_tup[1], dense_shape=trues_tup[2]), default_value=-1).eval()
+    trues = tf.sparse_tensor_to_dense(
+        tf.SparseTensor(indices=trues_tup[0], values=trues_tup[1],
+                        dense_shape=trues_tup[2]), default_value=-1).eval()
 
     for true, pred in zip(trues, preds):
-        predicted_label = "".join([inv_index_mapping[ch] for ch in pred if ch != -1])
+        predicted_label = "".join(
+            [inv_index_mapping[ch] for ch in pred if ch != -1])
         true_label = "".join([inv_index_mapping[ch] for ch in true if ch != -1])
 
-        print("Predicted: {}\n   Actual: {}\n".format(predicted_label, true_label))
-        
+        print("Predicted: {}\n   Actual: {}\n".format(predicted_label,
+                                                      true_label))
+
+
 def load_dataset(dataset_path):
-	with open(dataset_path, 'rb') as f:
-		dataset = pickle.load(f)
-	return dataset
+    with open(dataset_path, 'rb') as f:
+        dataset = pickle.load(f)
+    return dataset
+
 
 def make_batches(dataset, batch_size=16):
     examples = []

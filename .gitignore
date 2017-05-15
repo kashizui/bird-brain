@@ -1,3 +1,7 @@
 tensorboard/
 data/
+LDC93S1_TIMIT-Acoustic-Phonetic-Continuous-Speech-Corpus/
+*.zip
 *.pyc
+.idea/
+venv/
