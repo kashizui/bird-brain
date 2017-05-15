@@ -4,7 +4,7 @@ from __future__ import print_function
 
 from six.moves.urllib.request import urlretrieve
 from six.moves import xrange as range
-from data import string_to_index_mapping
+from data import construct_string_to_index_mapping
 
 import os
 import pdb
@@ -100,7 +100,7 @@ def get_tidigits_to_index_mapping():
 	return {"z": 0, "o": 10, "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, "_": 11}
 
 def compare_predicted_to_true(preds, trues_tup):
-    inv_index_mapping = {v: k for k, v in string_to_index_mapping().items()}        
+    inv_index_mapping = {v: k for k, v in construct_string_to_index_mapping().items()}        
 
     preds = tf.sparse_tensor_to_dense(preds, default_value=-1).eval()
     trues = tf.sparse_tensor_to_dense(tf.SparseTensor(indices=trues_tup[0], values=trues_tup[1], dense_shape=trues_tup[2]), default_value=-1).eval()

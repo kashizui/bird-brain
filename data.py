@@ -47,7 +47,7 @@ def get_label(path):
 def string_to_index_mapping(label_string):
     return [str_to_index[c] for c in label_string]
 
-def construct_mapping():
+def construct_string_to_index_mapping():
     str_to_index = {}
     offset = ord("a")
     for c in ascii_lowercase:
@@ -60,6 +60,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Extracts MFCC features from corpus")
     parser.add_argument("corpus_path", type=str, help="Path to corpus")
     args = parser.parse_args()
-    str_to_index = construct_mapping()
+    str_to_index = construct_string_to_index_mapping()
     make_train(args.corpus_path)
     make_test(args.corpus_path)
