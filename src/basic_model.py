@@ -321,7 +321,6 @@ def main():
     logs_path = "tensorboard/" + strftime("%Y_%m_%d_%H_%M_%S", gmtime())
 
     train_dataset = load_dataset(config.train_path)
-
     val_dataset = load_dataset(config.val_path)
 
     train_feature_minibatches, train_labels_minibatches, train_seqlens_minibatches = make_batches(train_dataset, batch_size=Config.batch_size)
@@ -394,6 +393,7 @@ def main():
                     model.print_results(session, train_feature_minibatches[batch_ii], train_labels_minibatches[batch_ii], train_seqlens_minibatches[batch_ii])
 
                 if config.save_every > 0 and config.save_to_file and (curr_epoch + 1) % config.save_every == 0:
+                    os.makedirs(os.path.dirname(config.save_to_file), exist_ok=True)
                     saver.save(session, config.save_to_file, global_step=curr_epoch + 1)
 
 
