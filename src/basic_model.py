@@ -30,6 +30,9 @@ class Config(argparse.Namespace):
     Values defined here are the default values which can be overridden by the
     command-line arguments.
     """
+    #########################
+    # BEGIN PARAM DEFS
+    #########################
     # To define a help string associated with a parameter just make it a tuple
     # with the second value as the help string.
     train_path = './data/train/train.dat', "Give path to training data - this should not need to be changed if you are running from the assignment directory"
@@ -50,13 +53,18 @@ class Config(argparse.Namespace):
     l2_lambda = 0.0000001
     learning_rate = 1e-3
 
-    # Define derived params here
+    # Define derived parameters as properties
     @property
     def num_final_features(self):
         return self.num_mfcc_features * (2 * self.context_size + 1)
 
+    #########################
+    # END PARAM DEFS
+    #########################
+
     @classmethod
     def _build_parser(cls):
+        """Build an ArgumentParser based on the params defined above."""
         parser = argparse.ArgumentParser()
 
         import inspect
@@ -84,6 +92,7 @@ class Config(argparse.Namespace):
         return parser
 
     def __init__(self):
+        """Load in params from system command line."""
         super().__init__()
         parser = Config._build_parser()
         args = parser.parse_args()
@@ -240,11 +249,9 @@ class CTCModel(object):
         Use tf.train.AdamOptimizer for this model. Call optimizer.minimize() on self.loss.
 
         """
-        optimizer = tf.train.AdamOptimizer(
+        self.optimizer = tf.train.AdamOptimizer(
             learning_rate=self.config.learning_rate
         ).minimize(self.loss)
-
-        self.optimizer = optimizer
 
     def add_decoder_and_wer_op(self):
         """Setup the decoder and add the word error rate calculations here.
@@ -259,6 +266,9 @@ class CTCModel(object):
             top_paths=1,
         )
         decoded_sequence = tf.to_int32(result[0][0])
+
+        # FIXME: Calculate actual WER?
+        # edit_distance is no longer a proxy for WER, this is now character error rate
         wer = tf.reduce_mean(tf.edit_distance(
             hypothesis=decoded_sequence,
             truth=self.targets_placeholder,
@@ -368,6 +378,16 @@ def main():
 
                 log = "Epoch {}/{}, train_cost = {:.3f}, train_ed = {:.3f}, val_cost = {:.3f}, val_ed = {:.3f}, time = {:.3f}"
                 print(log.format(curr_epoch+1, config.num_epochs, train_cost, train_wer, val_batch_cost, val_batch_ler, time.time() - start))
+
+                # Write out status to JSON for CodaLab table display
+                with open('status.json', 'w') as fp:
+                    json.dump({
+                        'epoch': curr_epoch + 1,
+                        'train_cost': float(train_cost),
+                        'train_wer': float(train_wer),
+                        'val_batch_cost': float(val_batch_cost),
+                        'val_batch_ler': float(val_batch_ler),
+                    }, fp)
 
                 if config.print_every > 0 and (curr_epoch + 1) % config.print_every == 0:
                     batch_ii = 0
