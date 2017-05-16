@@ -200,9 +200,7 @@ class CTCModel(object):
         # logits_flat.shape = [batch_s*max_timestep, num_classes]
         logits_flat = tf.matmul(outputs_flat, self.W) + self.b
         # logits.shape = [batch_s, max_timestep, num_classes]
-        logits = tf.reshape(logits_flat, [outputs_shape[0], outputs_shape[1], self.config.num_classes])  # FIXME?
-
-        self.logits = logits
+        self.logits = tf.reshape(logits_flat, [outputs_shape[0], outputs_shape[1], self.config.num_classes])
 
     def add_loss_op(self):
         """Adds Ops for the loss function to the computational graph.
