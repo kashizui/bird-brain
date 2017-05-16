@@ -34,10 +34,9 @@ class Config(argparse.Namespace):
     # with the second value as the help string.
     train_path = './data/train/train.dat', "Give path to training data - this should not need to be changed if you are running from the assignment directory"
     val_path = './data/test/test.dat', "Give path to val data - this should not need to be changed if you are running from the assignment directory"
-
-    save_every = 0, "Save model every x iterations. save_every = 0 means not saving at all."
-    print_every = 10, "Print some training and val examples (true and predicted sequences) every x iterations."
-    save_to_file = 'saved_models/saved_model_epoch', "Provide filename prefix for saving intermediate models"
+    save_every = 50, "Save model every x epochs. 0 means not saving at all."
+    print_every = 10, "Print some training and val examples (true and predicted sequences) every x epochs. 0 means not printing at all."
+    save_to_file = 'models/saved_model_epoch', "Provide filename prefix for saving intermediate models"
     load_from_file = None, "Provide filename to load saved model"
 
     context_size = 0
@@ -301,8 +300,8 @@ class CTCModel(object):
         compare_predicted_to_true(train_first_batch_preds, train_targets_batch)
 
     def __init__(self, config):
-        self.build()
         self.config = config
+        self.build()
 
 
 def main():
@@ -370,11 +369,11 @@ def main():
                 log = "Epoch {}/{}, train_cost = {:.3f}, train_ed = {:.3f}, val_cost = {:.3f}, val_ed = {:.3f}, time = {:.3f}"
                 print(log.format(curr_epoch+1, config.num_epochs, train_cost, train_wer, val_batch_cost, val_batch_ler, time.time() - start))
 
-                if config.print_every is not None and (curr_epoch + 1) % config.print_every == 0:
+                if config.print_every > 0 and (curr_epoch + 1) % config.print_every == 0:
                     batch_ii = 0
                     model.print_results(session, train_feature_minibatches[batch_ii], train_labels_minibatches[batch_ii], train_seqlens_minibatches[batch_ii])
 
-                if config.save_every is not None and config.save_to_file is not None and (curr_epoch + 1) % config.save_every == 0:
+                if config.save_every > 0 and config.save_to_file and (curr_epoch + 1) % config.save_every == 0:
                     saver.save(session, config.save_to_file, global_step=curr_epoch + 1)
 
 
