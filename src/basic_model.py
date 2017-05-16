@@ -3,41 +3,107 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import time
+from time import gmtime, strftime
 import argparse
+import json
 import math
+import pdb
 import random
-import os
+import time
+# noinspection PyUnresolvedReferences,PyShadowingBuiltins
+from six.moves import xrange as range
+
+import numpy as np
 # uncomment this line to suppress Tensorflow warnings
 # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
-import numpy as np
-from six.moves import xrange as range
 
 from utils import *
-import pdb
-from time import gmtime, strftime
 
-class Config:
+
+class Config(argparse.Namespace):
     """Holds model hyperparams and data information.
 
     The config class is used to store various hyperparameters and dataset
-    information parameters. Model objects are passed a Config() object at
-    instantiation.
+    information parameters.
+
+    Values defined here are the default values which can be overridden by the
+    command-line arguments.
     """
+    # To define a help string associated with a parameter just make it a tuple
+    # with the second value as the help string.
+    train_path = './data/train/train.dat', "Give path to training data - this should not need to be changed if you are running from the assignment directory"
+    val_path = './data/test/test.dat', "Give path to val data - this should not need to be changed if you are running from the assignment directory"
+
+    save_every = 0, "Save model every x iterations. save_every = 0 means not saving at all."
+    print_every = 10, "Print some training and val examples (true and predicted sequences) every x iterations."
+    save_to_file = 'saved_models/saved_model_epoch', "Provide filename prefix for saving intermediate models"
+    load_from_file = None, "Provide filename to load saved model"
+
     context_size = 0
     num_mfcc_features = 24
-    num_final_features = num_mfcc_features * (2 * context_size + 1)
 
     batch_size = 16
-    num_classes = 28 # 11 (TIDIGITS - 0-9 + oh) + 1 (blank) = 12
+    num_classes = 28  # 11 (TIDIGITS - 0-9 + oh) + 1 (blank) = 12
     num_hidden = 128
 
     num_epochs = 50
     l2_lambda = 0.0000001
-    lr = 1e-3
+    learning_rate = 1e-3
 
-class CTCModel():
+    # Define derived params here
+    @property
+    def num_final_features(self):
+        return self.num_mfcc_features * (2 * self.context_size + 1)
+
+    @classmethod
+    def _build_parser(cls):
+        parser = argparse.ArgumentParser()
+
+        import inspect
+        for key, value in inspect.getmembers(cls):
+            if inspect.isroutine(value):  # skip methods
+                continue
+            if key.startswith('_'):  # skip magics
+                continue
+            if isinstance(value, property):  # skip properties
+                continue
+
+            doc = ''
+            if isinstance(value, tuple):
+                value, doc = value
+            doc += ' (default: {})'.format(value)
+
+            parser.add_argument(
+                '--' + key.replace('_', '-'),
+                nargs='?',
+                default=NotImplemented,
+                type=(str if value is None else type(value)),
+                dest=key,
+                help=doc,
+            )
+        return parser
+
+    def __init__(self):
+        super().__init__()
+        parser = Config._build_parser()
+        args = parser.parse_args()
+        for key, value in vars(args).items():
+            if value is NotImplemented:
+                default_value = getattr(Config, key)
+                if isinstance(default_value, tuple):
+                    default_value, _ = default_value
+                setattr(self, key, default_value)
+            else:
+                setattr(self, key, value)
+
+    def save(self, path):
+        """Save config to JSON file."""
+        with open(path, 'w') as fp:
+            json.dump(vars(self), fp)
+
+
+class CTCModel(object):
     """
     Implements a recursive neural network with a single hidden layer attached to CTC loss.
     This network will predict a sequence of TIDIGITS (e.g. z1039) for a given audio wav file.
@@ -56,32 +122,14 @@ class CTCModel():
         targets_placeholder: Sparse placeholder, type tf.int32. You don't need to specify shape dimension.
         seq_lens_placeholder: Sequence length placeholder tensor of shape (None), type tf.int32
 
-        TODO: Add these placeholders to self as the instance variables
-            self.inputs_placeholder
-            self.targets_placeholder
-            self.seq_lens_placeholder
-
         HINTS:
             - Use tf.sparse_placeholder(tf.int32) for targets_placeholder. This is required by TF's ctc_loss op.
             - Inputs is of shape [batch_size, max_timesteps, num_final_features], but we allow flexible sizes for
               batch_size and max_timesteps (hence the shape definition as [None, None, num_final_features].
-
-        (Don't change the variable names)
         """
-        inputs_placeholder = None
-        targets_placeholder = None
-        seq_lens_placeholder = None
-
-        ### YOUR CODE HERE (~3 lines)
-        inputs_placeholder = tf.placeholder(tf.float32, shape=[None, None, Config.num_final_features])
-        targets_placeholder = tf.sparse_placeholder(tf.int32)
-        seq_lens_placeholder = tf.placeholder(tf.int32, shape=[None])
-        ### END YOUR CODE
-
-        self.inputs_placeholder = inputs_placeholder
-        self.targets_placeholder = targets_placeholder
-        self.seq_lens_placeholder = seq_lens_placeholder
-
+        self.inputs_placeholder = tf.placeholder(tf.float32, shape=[None, None, self.config.num_final_features])
+        self.targets_placeholder = tf.sparse_placeholder(tf.int32)
+        self.seq_lens_placeholder = tf.placeholder(tf.int32, shape=[None])
 
     def create_feed_dict(self, inputs_batch, targets_batch, seq_lens_batch):
         """Creates the feed_dict for the digit recognizer.
@@ -103,17 +151,11 @@ class CTCModel():
         Returns:
             feed_dict: The feed dictionary mapping from placeholders to values.
         """
-        feed_dict = {}
-
-        ### YOUR CODE HERE (~3-4 lines)
         return {
             self.inputs_placeholder: inputs_batch,
             self.targets_placeholder: targets_batch,
             self.seq_lens_placeholder: seq_lens_batch,
         }
-        ### END YOUR CODE
-
-        return feed_dict
 
     def add_prediction_op(self):
         """Applies a GRU RNN over the input data, then an affine layer projection. Steps to complete
@@ -130,12 +172,8 @@ class CTCModel():
             * W should be shape [num_hidden, num_classes]. num_classes for our dataset is 12
             * tf.contrib.rnn.GRUCell, tf.contrib.rnn.MultiRNNCell and tf.nn.dynamic_rnn are of interest
         """
-
-        logits = None
-
-        ### YOUR CODE HERE (~10-15 lines)
         # outputs.shape = [batch_s, max_timestep, num_hidden]
-        gru = tf.contrib.rnn.GRUCell(Config.num_hidden)
+        gru = tf.contrib.rnn.GRUCell(self.config.num_hidden)
         outputs, last_states = tf.nn.dynamic_rnn(
             cell=gru,
             inputs=self.inputs_placeholder,
@@ -143,22 +181,20 @@ class CTCModel():
             sequence_length=self.seq_lens_placeholder,
         )
 
-        self.W = tf.get_variable('W', shape=[Config.num_hidden, Config.num_classes],
+        self.W = tf.get_variable('W', shape=[self.config.num_hidden, self.config.num_classes],
            initializer=tf.contrib.layers.xavier_initializer())
-        self.b = tf.get_variable('b', shape=[Config.num_classes],
+        self.b = tf.get_variable('b', shape=[self.config.num_classes],
            initializer=tf.contrib.layers.xavier_initializer())
 
         # outputs_flat.shape = [batch_s*max_timestep, num_hidden]
         outputs_shape = tf.shape(outputs)
-        outputs_flat = tf.reshape(outputs, [-1, Config.num_hidden])
+        outputs_flat = tf.reshape(outputs, [-1, self.config.num_hidden])
         # logits_flat.shape = [batch_s*max_timestep, num_classes]
         logits_flat = tf.matmul(outputs_flat, self.W) + self.b
         # logits.shape = [batch_s, max_timestep, num_classes]
-        logits = tf.reshape(logits_flat, [outputs_shape[0], outputs_shape[1], Config.num_classes])  # FIXME?
-        ### END YOUR CODE
+        logits = tf.reshape(logits_flat, [outputs_shape[0], outputs_shape[1], self.config.num_classes])  # FIXME?
 
         self.logits = logits
-
 
     def add_loss_op(self):
         """Adds Ops for the loss function to the computational graph.
@@ -168,14 +204,10 @@ class CTCModel():
           the output of tf.nn.ctc_loss
         - You will need to first tf.transpose the data so that self.logits is shaped [max_timesteps, batch_s,
           num_classes].
-        - Configure tf.nn.ctc_loss so that identical consecutive labels are allowed
+        - self.configure tf.nn.ctc_loss so that identical consecutive labels are allowed
         - Compute L2 regularization cost for all trainable variables. Use tf.nn.l2_loss(var).
 
         """
-        ctc_loss = []
-        l2_cost = 0.0
-
-        ### YOUR CODE HERE (~6-8 lines)
         # logitsT.shape = [max_timesteps, batch_s, num_classes]
         self.logitsT = tf.transpose(self.logits, perm=[1, 0, 2])
 
@@ -188,14 +220,13 @@ class CTCModel():
         )
 
         l2_cost = tf.nn.l2_loss(self.W)
-        ### END YOUR CODE
 
         # Remove inf cost training examples (no path found, yet)
         loss_without_invalid_paths = tf.boolean_mask(ctc_loss, tf.less(ctc_loss, tf.constant(10000.)))
         self.num_valid_examples = tf.cast(tf.shape(loss_without_invalid_paths)[0], tf.int32)
         cost = tf.reduce_mean(loss_without_invalid_paths)
 
-        self.loss = Config.l2_lambda * l2_cost + cost
+        self.loss = self.config.l2_lambda * l2_cost + cost
 
     def add_training_op(self):
         """Sets up the training Ops.
@@ -210,11 +241,9 @@ class CTCModel():
         Use tf.train.AdamOptimizer for this model. Call optimizer.minimize() on self.loss.
 
         """
-        optimizer = None
-
-        ### YOUR CODE HERE (~1-2 lines)
-        optimizer = tf.train.AdamOptimizer().minimize(self.loss)
-        ### END YOUR CODE
+        optimizer = tf.train.AdamOptimizer(
+            learning_rate=self.config.learning_rate
+        ).minimize(self.loss)
 
         self.optimizer = optimizer
 
@@ -225,10 +254,6 @@ class CTCModel():
         Also, report the mean WER over the batch in variable wer
 
         """
-        decoded_sequence = None
-        wer = None
-
-        ### YOUR CODE HERE (~2-3 lines)
         result = tf.nn.ctc_beam_search_decoder(
             self.logitsT,
             self.seq_lens_placeholder,
@@ -240,7 +265,6 @@ class CTCModel():
             truth=self.targets_placeholder,
             normalize=True,
         ))
-        ### END YOUR CODE
 
         tf.summary.scalar("loss", self.loss)
         tf.summary.scalar("wer", wer)
@@ -260,7 +284,6 @@ class CTCModel():
         self.add_decoder_and_wer_op()
         self.add_summary_op()
 
-
     def train_on_batch(self, session, train_inputs_batch, train_targets_batch, train_seq_len_batch, train=True):
         feed = self.create_feed_dict(train_inputs_batch, train_targets_batch, train_seq_len_batch)
         batch_cost, wer, batch_num_valid_ex, summary = session.run([self.loss, self.wer, self.num_valid_examples, self.merged_summary_op], feed)
@@ -272,30 +295,25 @@ class CTCModel():
 
         return batch_cost, wer, summary
 
-    def print_results(self, train_inputs_batch, train_targets_batch, train_seq_len_batch):
+    def print_results(self, session, train_inputs_batch, train_targets_batch, train_seq_len_batch):
         train_feed = self.create_feed_dict(train_inputs_batch, train_targets_batch, train_seq_len_batch)
         train_first_batch_preds = session.run(self.decoded_sequence, feed_dict=train_feed)
         compare_predicted_to_true(train_first_batch_preds, train_targets_batch)
 
-    def __init__(self):
+    def __init__(self, config):
         self.build()
+        self.config = config
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--train_path', nargs='?', default='./data/train/train.dat', type=str, help="Give path to training data - this should not need to be changed if you are running from the assignment directory")
-    parser.add_argument('--val_path', nargs='?', default='./data/test/test.dat', type=str, help="Give path to val data - this should not need to be changed if you are running from the assignment directory")
-    parser.add_argument('--save_every', nargs='?', default=None, type=int, help="Save model every x iterations. Default is not saving at all.")
-    parser.add_argument('--print_every', nargs='?', default=10, type=int, help="Print some training and val examples (true and predicted sequences) every x iterations. Default is 10")
-    parser.add_argument('--save_to_file', nargs='?', default='saved_models/saved_model_epoch', type=str, help="Provide filename prefix for saving intermediate models")
-    parser.add_argument('--load_from_file', nargs='?', default=None, type=str, help="Provide filename to load saved model")
-    args = parser.parse_args()
+def main():
+    config = Config()
+    config.save('config.json')
 
     logs_path = "tensorboard/" + strftime("%Y_%m_%d_%H_%M_%S", gmtime())
 
-    train_dataset = load_dataset(args.train_path)
+    train_dataset = load_dataset(config.train_path)
 
-    val_dataset = load_dataset(args.val_path)
+    val_dataset = load_dataset(config.val_path)
 
     train_feature_minibatches, train_labels_minibatches, train_seqlens_minibatches = make_batches(train_dataset, batch_size=Config.batch_size)
     val_feature_minibatches, val_labels_minibatches, val_seqlens_minibatches = make_batches(train_dataset, batch_size=len(val_dataset[0]))
@@ -312,7 +330,7 @@ if __name__ == "__main__":
     num_batches_per_epoch = int(math.ceil(num_examples / Config.batch_size))
 
     with tf.Graph().as_default():
-        model = CTCModel()
+        model = CTCModel(config)
         init = tf.global_variables_initializer()
 
         saver = tf.train.Saver(tf.trainable_variables())
@@ -320,9 +338,9 @@ if __name__ == "__main__":
         with tf.Session() as session:
             # Initializate the weights and biases
             session.run(init)
-            if args.load_from_file is not None:
-                new_saver = tf.train.import_meta_graph('%s.meta'%args.load_from_file, clear_devices=True)
-                new_saver.restore(session, args.load_from_file)
+            if config.load_from_file is not None:
+                new_saver = tf.train.import_meta_graph('%s.meta'%config.load_from_file, clear_devices=True)
+                new_saver.restore(session, config.load_from_file)
 
             train_writer = tf.summary.FileWriter(logs_path + '/train', session.graph)
 
@@ -330,7 +348,7 @@ if __name__ == "__main__":
 
             step_ii = 0
 
-            for curr_epoch in range(Config.num_epochs):
+            for curr_epoch in range(config.num_epochs):
                 total_train_cost = total_train_wer = 0
                 start = time.time()
 
@@ -344,18 +362,21 @@ if __name__ == "__main__":
                     train_writer.add_summary(summary, step_ii)
                     step_ii += 1
 
-
                 train_cost = total_train_cost / num_examples
                 train_wer = total_train_wer / num_examples
 
                 val_batch_cost, val_batch_ler, _ = model.train_on_batch(session, val_feature_minibatches[0], val_labels_minibatches[0], val_seqlens_minibatches[0], train=False)
 
                 log = "Epoch {}/{}, train_cost = {:.3f}, train_ed = {:.3f}, val_cost = {:.3f}, val_ed = {:.3f}, time = {:.3f}"
-                print(log.format(curr_epoch+1, Config.num_epochs, train_cost, train_wer, val_batch_cost, val_batch_ler, time.time() - start))
+                print(log.format(curr_epoch+1, config.num_epochs, train_cost, train_wer, val_batch_cost, val_batch_ler, time.time() - start))
 
-                if args.print_every is not None and (curr_epoch + 1) % args.print_every == 0:
+                if config.print_every is not None and (curr_epoch + 1) % config.print_every == 0:
                     batch_ii = 0
-                    model.print_results(train_feature_minibatches[batch_ii], train_labels_minibatches[batch_ii], train_seqlens_minibatches[batch_ii])
+                    model.print_results(session, train_feature_minibatches[batch_ii], train_labels_minibatches[batch_ii], train_seqlens_minibatches[batch_ii])
 
-                if args.save_every is not None and args.save_to_file is not None and (curr_epoch + 1) % args.save_every == 0:
-                    saver.save(session, args.save_to_file, global_step=curr_epoch + 1)
+                if config.save_every is not None and config.save_to_file is not None and (curr_epoch + 1) % config.save_every == 0:
+                    saver.save(session, config.save_to_file, global_step=curr_epoch + 1)
+
+
+if __name__ == "__main__":
+    main()
