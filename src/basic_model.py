@@ -165,6 +165,23 @@ class CTCModel(object):
             self.seq_lens_placeholder: seq_lens_batch,
         }
 
+    def apply_affine_over_sequence(self, name, inputs, output_size):
+        # inputs.shape = [batch_s, max_timestep, input_size]
+        input_size = inputs.shape[2]
+        inputs_shape = tf.shape(inputs)  # get shape at runtime as well for batch_s and max_timestep
+
+        self.W[name] = tf.get_variable('W' + name, shape=[input_size, output_size],
+                                       initializer=tf.contrib.layers.xavier_initializer())
+        self.b[name] = tf.get_variable('b' + name, shape=[output_size],
+                                       initializer=tf.contrib.layers.xavier_initializer())
+
+        # Flatten the sequence into a long matrix and apply affine transform
+        inputs_flat = tf.reshape(inputs, [-1, input_size])                  # shape = [batch_s * max_timestep, input_size]
+        outputs_flat = tf.matmul(inputs_flat, self.W[name]) + self.b[name]  # shape = [batch_s * max_timestep, output_size]
+        outputs = tf.reshape(outputs_flat, [inputs_shape[0], inputs_shape[1], output_size])  # shape = [batch_s, max_timestep, output_size]
+
+        return outputs
+
     def add_prediction_op(self):
         """Applies a GRU RNN over the input data, then an affine layer projection. Steps to complete
         in this function:
@@ -180,27 +197,17 @@ class CTCModel(object):
             * W should be shape [num_hidden, num_classes]. num_classes for our dataset is 12
             * tf.contrib.rnn.GRUCell, tf.contrib.rnn.MultiRNNCell and tf.nn.dynamic_rnn are of interest
         """
-        # outputs.shape = [batch_s, max_timestep, num_hidden]
+        # scores.shape = [batch_s, max_timestep, num_hidden]
         gru = tf.contrib.rnn.GRUCell(self.config.num_hidden)
-        outputs, last_states = tf.nn.dynamic_rnn(
+        scores, last_states = tf.nn.dynamic_rnn(
             cell=gru,
             inputs=self.inputs_placeholder,
             dtype=tf.float32,
             sequence_length=self.seq_lens_placeholder,
         )
 
-        self.W = tf.get_variable('W', shape=[self.config.num_hidden, self.config.num_classes],
-           initializer=tf.contrib.layers.xavier_initializer())
-        self.b = tf.get_variable('b', shape=[self.config.num_classes],
-           initializer=tf.contrib.layers.xavier_initializer())
-
-        # outputs_flat.shape = [batch_s*max_timestep, num_hidden]
-        outputs_shape = tf.shape(outputs)
-        outputs_flat = tf.reshape(outputs, [-1, self.config.num_hidden])
-        # logits_flat.shape = [batch_s*max_timestep, num_classes]
-        logits_flat = tf.matmul(outputs_flat, self.W) + self.b
         # logits.shape = [batch_s, max_timestep, num_classes]
-        self.logits = tf.reshape(logits_flat, [outputs_shape[0], outputs_shape[1], self.config.num_classes])
+        self.logits = self.apply_affine_over_sequence(name='final', inputs=scores, output_size=self.config.num_classes)
 
     def add_loss_op(self):
         """Adds Ops for the loss function to the computational graph.
@@ -225,7 +232,9 @@ class CTCModel(object):
             ctc_merge_repeated=True,
         )
 
-        l2_cost = tf.nn.l2_loss(self.W)
+        # Accumulate l2 cost over the weight matrices
+        for _, W in self.W.items():
+            l2_cost = tf.nn.l2_loss(W)
 
         # Remove inf cost training examples (no path found, yet)
         loss_without_invalid_paths = tf.boolean_mask(ctc_loss, tf.less(ctc_loss, tf.constant(10000.)))
@@ -308,6 +317,8 @@ class CTCModel(object):
         compare_predicted_to_true(train_first_batch_preds, train_targets_batch)
 
     def __init__(self, config):
+        self.W = {}
+        self.b = {}
         self.config = config
         self.build()
 

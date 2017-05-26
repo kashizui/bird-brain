@@ -5,3 +5,4 @@ LDC93S1_TIMIT-Acoustic-Phonetic-Continuous-Speech-Corpus/
 *.pyc
 .idea/
 venv/
+config.json
