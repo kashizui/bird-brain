@@ -51,6 +51,7 @@ class Config(argparse.Namespace):
     num_hidden_layers = 1
 
     activation = 'relu', "Activation type, either relu or tanh"
+    cell_type = 'GRUCell', "RNN cell type, can be any member of tf.contrib.rnn, such as GRUCell, LSTMCell, or BasicRNNCell"
 
     num_epochs = 50
     l2_lambda = 0.0000001
@@ -168,7 +169,7 @@ class CTCModel(object):
             self.seq_lens_placeholder: seq_lens_batch,
         }
 
-    def apply_affine_over_sequence(self, name, inputs, output_size):
+    def apply_affine_over_sequence(self, name, inputs, output_size, activation=None):
         # inputs.shape = [batch_s, max_timestep, input_size]
         input_size = inputs.shape.as_list()[2]
         inputs_shape = tf.shape(inputs)  # get shape at runtime as well for batch_s and max_timestep
@@ -182,6 +183,9 @@ class CTCModel(object):
         inputs_flat = tf.reshape(inputs, [-1, input_size])                  # shape = [batch_s * max_timestep, input_size]
         outputs_flat = tf.matmul(inputs_flat, self.W[name]) + self.b[name]  # shape = [batch_s * max_timestep, output_size]
         outputs = tf.reshape(outputs_flat, [inputs_shape[0], inputs_shape[1], output_size])  # shape = [batch_s, max_timestep, output_size]
+
+        if activation is not None:
+            outputs = activation(outputs)
 
         return outputs
 
@@ -206,19 +210,31 @@ class CTCModel(object):
             inputs = self.apply_affine_over_sequence(
                 name=str(i+1),
                 inputs=inputs,
-                output_size=self.config.hidden_size)
+                output_size=self.config.hidden_size,
+                activation=tf.nn.relu)
 
-        # scores.shape = [batch_s, max_timestep, num_hidden]
-        gru = tf.contrib.rnn.GRUCell(
+        # Construct forward and backward cells of bidirectional RNN
+        construct_cell = getattr(tf.contrib.rnn, self.config.cell_type)
+        fwdcell = construct_cell(
             self.config.hidden_size,
             activation=tf.nn.relu if self.config.activation == 'relu' else tf.tanh
         )
-        scores, last_states = tf.nn.dynamic_rnn(
-            cell=gru,
+        bckcell = construct_cell(
+            self.config.hidden_size,
+            activation=tf.nn.relu if self.config.activation == 'relu' else tf.tanh
+        )
+        # TODO: look into non-zero initial hidden states?
+        rnn_outputs, rnn_last_states = tf.nn.bidirectional_dynamic_rnn(
+            fwdcell, bckcell,
             inputs=inputs,
             dtype=tf.float32,
             sequence_length=self.seq_lens_placeholder)
 
+        # Sum the forward and backward hidden states together for the scores
+        # scores.shape = [batch_s, max_timestep, num_hidden]
+        scores = tf.add(rnn_outputs[0], rnn_outputs[1], name='scores')
+
+        # Push the scores through an affine layer
         # logits.shape = [batch_s, max_timestep, num_classes]
         self.logits = self.apply_affine_over_sequence(
             name='final',
