@@ -47,7 +47,8 @@ class Config(argparse.Namespace):
 
     batch_size = 16
     num_classes = 28  # 11 (TIDIGITS - 0-9 + oh) + 1 (blank) = 12
-    num_hidden = 128
+    hidden_size = 128
+    num_hidden_layers = 1
 
     num_epochs = 50
     l2_lambda = 0.0000001
@@ -167,7 +168,7 @@ class CTCModel(object):
 
     def apply_affine_over_sequence(self, name, inputs, output_size):
         # inputs.shape = [batch_s, max_timestep, input_size]
-        input_size = inputs.shape[2]
+        input_size = inputs.shape.as_list()[2]
         inputs_shape = tf.shape(inputs)  # get shape at runtime as well for batch_s and max_timestep
 
         self.W[name] = tf.get_variable('W' + name, shape=[input_size, output_size],
@@ -187,27 +188,37 @@ class CTCModel(object):
         in this function:
 
         - Roll over inputs_placeholder with GRUCell, producing a Tensor of shape [batch_s, max_timestep,
-          num_hidden].
+          hidden_size].
         - Apply a W * f + b transformation over the data, where f is each hidden layer feature. This
           should produce a Tensor of shape [batch_s, max_timesteps, num_classes]. Set this result to
           "logits".
 
         Remember:
             * Use the xavier initialization for matrices (W, but not b).
-            * W should be shape [num_hidden, num_classes]. num_classes for our dataset is 12
+            * W should be shape [hidden_size, num_classes]. num_classes for our dataset is 12
             * tf.contrib.rnn.GRUCell, tf.contrib.rnn.MultiRNNCell and tf.nn.dynamic_rnn are of interest
         """
+        # Non-recurrent hidden layers
+        inputs = self.inputs_placeholder
+        for i in range(self.config.num_hidden_layers):
+            inputs = self.apply_affine_over_sequence(
+                name=str(i+1),
+                inputs=inputs,
+                output_size=self.config.hidden_size)
+
         # scores.shape = [batch_s, max_timestep, num_hidden]
-        gru = tf.contrib.rnn.GRUCell(self.config.num_hidden)
+        gru = tf.contrib.rnn.GRUCell(self.config.hidden_size)
         scores, last_states = tf.nn.dynamic_rnn(
             cell=gru,
-            inputs=self.inputs_placeholder,
+            inputs=inputs,
             dtype=tf.float32,
-            sequence_length=self.seq_lens_placeholder,
-        )
+            sequence_length=self.seq_lens_placeholder)
 
         # logits.shape = [batch_s, max_timestep, num_classes]
-        self.logits = self.apply_affine_over_sequence(name='final', inputs=scores, output_size=self.config.num_classes)
+        self.logits = self.apply_affine_over_sequence(
+            name='final',
+            inputs=scores,
+            output_size=self.config.num_classes)
 
     def add_loss_op(self):
         """Adds Ops for the loss function to the computational graph.
