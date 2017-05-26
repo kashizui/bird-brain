@@ -50,6 +50,8 @@ class Config(argparse.Namespace):
     hidden_size = 128
     num_hidden_layers = 1
 
+    activation = 'relu', "Activation type, either relu or tanh"
+
     num_epochs = 50
     l2_lambda = 0.0000001
     learning_rate = 1e-3
@@ -207,7 +209,10 @@ class CTCModel(object):
                 output_size=self.config.hidden_size)
 
         # scores.shape = [batch_s, max_timestep, num_hidden]
-        gru = tf.contrib.rnn.GRUCell(self.config.hidden_size)
+        gru = tf.contrib.rnn.GRUCell(
+            self.config.hidden_size,
+            activation=tf.nn.relu if self.config.activation == 'relu' else tf.tanh
+        )
         scores, last_states = tf.nn.dynamic_rnn(
             cell=gru,
             inputs=inputs,
