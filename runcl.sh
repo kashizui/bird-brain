@@ -1,14 +1,41 @@
 #!/bin/bash
+# Wrapper script for running CodaLab jobs.
+#
+# Usage:
+#
+#   ./runcl.sh --learning-rate 1e-4 --num-epochs 100
+#
+# To use GPU:
+#
+#   ./runcl.sh --gpu --learning-rate 1e-4 --num-epochs 100
+#
+# To resume training an existing model:
+#
+#   ./runcl.sh [--gpu] --resume <uuid> <epoch> --learning-rate 1e-4 --num-epochs 100
+#
 
 IMAGE_VERSION=$(cat DOCKERIMAGEVERSION)
 IMAGE_NAME="sckoo/bird-brain:v$IMAGE_VERSION"
+OPTIONS=""
+DEPENDENCIES=""
+RUNARGS=""
 
-if [[ "$1" == "--gpu" ]]; then
-    ARGS="--request-docker-image $IMAGE_NAME-gpu --request-gpus 1"
-    shift
-else
-    ARGS="--request-docker-image $IMAGE_NAME"
-fi
+for var in "$@"; do
+    if [[ "$1" == "--gpu" ]]; then
+        IMAGE_NAME="$IMAGE_NAME-gpu"
+        OPTIONS="$OPTIONS --request-gpus 1"
+        shift
+    elif [[ "$1" == "--resume" ]]; then
+        uuid="$2"
+        epoch="$3"
+        DEPENDENCIES="$DEPENDENCIES old_model:$uuid/models _config.json:$uuid/config.json"
+        RUNARGS="$RUNARGS --load-from-file old_model/saved_model_epoch-$epoch --config _config.json"
+        shift
+        shift
+        shift
+    fi
+done
+
 
 # Ensure we're on the right worksheet
 cl work main::bird-brain >/dev/null
@@ -22,7 +49,7 @@ if [[ $(find src -newer .last_uploaded | wc -c) -ne 0 ]]; then
 fi
 rm .last_uploaded
 
-command="cl run --tail $ARGS :src :data --- python src/basic_model.py ${@}"
+command="cl run --tail $OPTIONS --request-docker-image $IMAGE_NAME $DEPENDENCIES :src :data --- python src/basic_model.py $RUNARGS ${@}"
 echo $command
 printf "New run bundle uuid: "
 $command

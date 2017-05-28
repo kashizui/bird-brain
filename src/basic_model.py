@@ -106,6 +106,10 @@ class Config(argparse.Namespace):
         """Build an ArgumentParser based on the params defined above."""
         parser = argparse.ArgumentParser()
 
+        parser.add_argument(
+            '--config', nargs='?', default=None, type=str, dest='config',
+            help='Load config from this file')
+
         import inspect
         for key, value in inspect.getmembers(cls):
             if inspect.isroutine(value):  # skip methods
@@ -135,9 +139,18 @@ class Config(argparse.Namespace):
         super().__init__()
         parser = Config._build_parser()
         args = parser.parse_args()
+        old_config = {}
+
+        # Load in any existing config file specified
+        if args.config is not None:
+            with open(args.config, 'r') as fp:
+                delattr(args, 'config')
+                old_config = json.load(fp)
+
         for key, value in vars(args).items():
             if value is NotImplemented:
-                default_value = getattr(Config, key)
+                # First try old config, then try global defaults
+                default_value = old_config.get(key, getattr(Config, key))
                 if isinstance(default_value, tuple):
                     default_value, _ = default_value
                 setattr(self, key, default_value)
@@ -414,7 +427,7 @@ def main():
 
         saver = tf.train.Saver(tf.trainable_variables())
 
-        with tf.Session(config=tf.ConfigProto(log_device_placement=True)) as session:
+        with tf.Session() as session:
             # Initializate the weights and biases
             session.run(init)
             if config.load_from_file is not None:
