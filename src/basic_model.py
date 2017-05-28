@@ -21,6 +21,30 @@ import tensorflow as tf
 from utils import *
 
 
+class BatchSkipped(Exception): pass
+
+
+def leaky_relu(alpha):
+    # From https://groups.google.com/a/tensorflow.org/forum/#!msg/discuss/V6aeBw4nlaE/VUAgE-nXEwAJ
+    def apply(inputs):
+        return tf.maximum(alpha*inputs, inputs)
+    return apply
+
+
+def clipped_relu(mu):
+    def apply(inputs):
+        return tf.minimum(tf.maximum(inputs, 0), mu)
+    return apply
+
+
+ACTIVATION_ALIAS = {
+    'relu': tf.nn.relu,
+    'tanh': tf.tanh,
+    'leaky': leaky_relu,
+    'clipped': clipped_relu,
+}
+
+
 class Config(argparse.Namespace):
     """Holds model hyperparams and data information.
 
@@ -50,7 +74,9 @@ class Config(argparse.Namespace):
     hidden_size = 128
     num_hidden_layers = 1
 
-    activation = 'relu', "Activation type, either relu or tanh"
+    activation = 'relu', "Activation type for the recurrent layers [options: " + ', '.join(ACTIVATION_ALIAS.keys()) + "]"
+    leaky_alpha = 0.01, "alpha value for leaky ReLU activation"
+    clipped_mu = 1., "max value for clipped ReLU activation"
     cell_type = 'GRUCell', "RNN cell type, can be any member of tf.contrib.rnn, such as GRUCell, LSTMCell, or BasicRNNCell"
 
     num_epochs = 50
@@ -61,6 +87,15 @@ class Config(argparse.Namespace):
     @property
     def num_final_features(self):
         return self.num_mfcc_features * (2 * self.context_size + 1)
+
+    @property
+    def activation_func(self):
+        func = ACTIVATION_ALIAS[self.activation]
+        if self.activation == 'leaky':
+            return func(self.leaky_alpha)
+        if self.activation == 'clipped':
+            return func(self.clipped_mu)
+        return func
 
     #########################
     # END PARAM DEFS
@@ -169,19 +204,17 @@ class CTCModel(object):
             self.seq_lens_placeholder: seq_lens_batch,
         }
 
-    def apply_affine_over_sequence(self, name, inputs, output_size, activation=None):
+    def apply_affine_over_sequence(self, inputs, output_size, activation=None):
         # inputs.shape = [batch_s, max_timestep, input_size]
         input_size = inputs.shape.as_list()[2]
         inputs_shape = tf.shape(inputs)  # get shape at runtime as well for batch_s and max_timestep
 
-        W = tf.get_variable('W' + name, shape=[input_size, output_size],
-                                       initializer=tf.contrib.layers.xavier_initializer())
-        b = tf.get_variable('b' + name, shape=[output_size],
-                                       initializer=tf.contrib.layers.xavier_initializer())
+        W = tf.get_variable('W', shape=[input_size, output_size], initializer=tf.contrib.layers.xavier_initializer())
+        b = tf.get_variable('b', shape=[output_size])
 
         # Flatten the sequence into a long matrix and apply affine transform
-        inputs_flat = tf.reshape(inputs, [-1, input_size])                  # shape = [batch_s * max_timestep, input_size]
-        outputs_flat = tf.matmul(inputs_flat, W) + b  # shape = [batch_s * max_timestep, output_size]
+        inputs_flat = tf.reshape(inputs, [-1, input_size])      # shape = [batch_s * max_timestep, input_size]
+        outputs_flat = tf.matmul(inputs_flat, W) + b            # shape = [batch_s * max_timestep, output_size]
         outputs = tf.reshape(outputs_flat, [inputs_shape[0], inputs_shape[1], output_size])  # shape = [batch_s, max_timestep, output_size]
 
         if activation is not None:
@@ -201,27 +234,26 @@ class CTCModel(object):
 
         Remember:
             * Use the xavier initialization for matrices (W, but not b).
-            * W should be shape [hidden_size, num_classes]. num_classes for our dataset is 12
-            * tf.contrib.rnn.GRUCell, tf.contrib.rnn.MultiRNNCell and tf.nn.dynamic_rnn are of interest
+            * W should be shape [hidden_size, num_classes].
         """
         # Non-recurrent hidden layers
         inputs = self.inputs_placeholder
         for i in range(self.config.num_hidden_layers):
-            inputs = self.apply_affine_over_sequence(
-                name=str(i+1),
-                inputs=inputs,
-                output_size=self.config.hidden_size,
-                activation=tf.nn.relu)
+            with tf.variable_scope('hidden%d' % (i+1)) as vs:
+                inputs = self.apply_affine_over_sequence(
+                    inputs=inputs,
+                    output_size=self.config.hidden_size,
+                    activation=tf.nn.relu)
 
         # Construct forward and backward cells of bidirectional RNN
         construct_cell = getattr(tf.contrib.rnn, self.config.cell_type)
         fwdcell = construct_cell(
             self.config.hidden_size,
-            activation=tf.nn.relu if self.config.activation == 'relu' else tf.tanh
+            activation=self.config.activation_func,
         )
         bckcell = construct_cell(
             self.config.hidden_size,
-            activation=tf.nn.relu if self.config.activation == 'relu' else tf.tanh
+            activation=self.config.activation_func,
         )
         # TODO: look into non-zero initial hidden states?
         rnn_outputs, rnn_last_states = tf.nn.bidirectional_dynamic_rnn(
@@ -236,10 +268,10 @@ class CTCModel(object):
 
         # Push the scores through an affine layer
         # logits.shape = [batch_s, max_timestep, num_classes]
-        self.logits = self.apply_affine_over_sequence(
-            name='final',
-            inputs=scores,
-            output_size=self.config.num_classes)
+        with tf.variable_scope('final') as vs:
+            self.logits = self.apply_affine_over_sequence(
+                inputs=scores,
+                output_size=self.config.num_classes)
 
     def add_loss_op(self):
         """Adds Ops for the loss function to the computational graph.
@@ -336,7 +368,7 @@ class CTCModel(object):
         batch_cost, wer, batch_num_valid_ex, summary = session.run([self.loss, self.wer, self.num_valid_examples, self.merged_summary_op], feed)
 
         if math.isnan(batch_cost): # basically all examples in this batch have been skipped
-            return 0
+            raise BatchSkipped
         if train:
             _ = session.run([self.optimizer], feed)
 
@@ -355,6 +387,7 @@ class CTCModel(object):
 def main():
     config = Config()
     config.save('config.json')
+    print(config)
 
     logs_path = "tensorboard/" + strftime("%Y_%m_%d_%H_%M_%S", gmtime())
 
@@ -381,7 +414,7 @@ def main():
 
         saver = tf.train.Saver(tf.trainable_variables())
 
-        with tf.Session() as session:
+        with tf.Session(config=tf.ConfigProto(log_device_placement=True)) as session:
             # Initializate the weights and biases
             session.run(init)
             if config.load_from_file is not None:
@@ -389,8 +422,6 @@ def main():
                 new_saver.restore(session, config.load_from_file)
 
             train_writer = tf.summary.FileWriter(logs_path + '/train', session.graph)
-
-            global_start = time.time()
 
             step_ii = 0
 
@@ -401,7 +432,11 @@ def main():
                 for batch in random.sample(range(num_batches_per_epoch),num_batches_per_epoch):
                     cur_batch_size = len(train_seqlens_minibatches[batch])
 
-                    batch_cost, batch_ler, summary = model.train_on_batch(session, train_feature_minibatches[batch], train_labels_minibatches[batch], train_seqlens_minibatches[batch], train=True)
+                    try:
+                        batch_cost, batch_ler, summary = model.train_on_batch(session, train_feature_minibatches[batch], train_labels_minibatches[batch], train_seqlens_minibatches[batch], train=True)
+                    except BatchSkipped:
+                        continue
+
                     total_train_cost += batch_cost * cur_batch_size
                     total_train_wer += batch_ler * cur_batch_size
 
