@@ -16,7 +16,9 @@ def run_model():
     logs_path = "tensorboard/" + strftime("%Y_%m_%d_%H_%M_%S", gmtime())
 
     train_dataset = load_dataset(config.train_path)
-    val_dataset = load_dataset(config.val_path)
+    test_dataset = load_dataset(config.test_path)
+    
+    train_dataset, val_dataset = split_train_and_val(train_dataset)
 
     train_feature_minibatches, train_labels_minibatches, train_seqlens_minibatches = make_batches(train_dataset, batch_size=Config.batch_size)
     val_feature_minibatches, val_labels_minibatches, val_seqlens_minibatches = make_batches(val_dataset, batch_size=len(val_dataset[0]))

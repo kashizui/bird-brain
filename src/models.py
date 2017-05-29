@@ -2,6 +2,8 @@ import tensorflow as tf
 import argparse
 import json
 
+from utils import compare_predicted_to_true
+
 class BatchSkipped(Exception): pass
 
 def leaky_relu(alpha):
@@ -40,7 +42,7 @@ class Config(argparse.Namespace):
     # To define a help string associated with a parameter just make it a tuple
     # with the second value as the help string.
     train_path = './data/train/train.dat', "Give path to training data - this should not need to be changed if you are running from the assignment directory"
-    val_path = './data/test/test.dat', "Give path to val data - this should not need to be changed if you are running from the assignment directory"
+    test_path = './data/test/test.dat', "Give path to test data - this should not need to be changed if you are running from the assignment directory"
     save_every = 50, "Save model every x epochs. 0 means not saving at all."
     print_every = 10, "Print some training and val examples (true and predicted sequences) every x epochs. 0 means not printing at all."
     save_to_file = 'models/saved_model_epoch', "Provide filename prefix for saving intermediate models"
@@ -186,7 +188,6 @@ class Model(object):
     def add_prediction_op(self):
         pass
     
-    
     def add_loss_op(self):
         pass
      
@@ -235,8 +236,13 @@ class Model(object):
     def train_on_batch(self, session, train_inputs_batch, train_targets_batch, train_seq_len_batch, train=True):
         pass
     
+    def test_on_batch(self, session, train_inputs_batch, train_targets_batch, train_seq_len_batch):
+        self.train_on_batch(session, train_inputs_batch, train_targets_batch, train_seq_len_batch, train=False)
+    
     def print_results(self, session, train_inputs_batch, train_targets_batch, train_seq_len_batch):
-        pass
+        train_feed = self.create_feed_dict(train_inputs_batch, train_targets_batch, train_seq_len_batch)
+        train_first_batch_preds = session.run(self.decoded_sequence, feed_dict=train_feed)
+        compare_predicted_to_true(train_first_batch_preds, train_targets_batch)
     
     def __init__(self, config):
         pass

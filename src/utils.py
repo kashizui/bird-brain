@@ -14,7 +14,6 @@ import os.path
 import tensorflow as tf
 import _pickle as pickle
 
-
 def sparse_tuple_from(sequences, dtype=np.int32):
     """Create a sparse representention of x.
     Args:
@@ -136,3 +135,23 @@ def make_batches(dataset, batch_size=16):
         seqlens.append(l3[i:i + batch_size])
 
     return examples, sequences, seqlens
+
+def split_train_and_val(dataset, val_split=0.1):
+    num_examples = len(dataset[0])
+    examples = np.asarray(dataset[0])
+    sequences = np.asarray(dataset[1])
+    seqlens = np.asarray(dataset[2])
+    
+    indices = np.random.permutation(num_examples)
+    examples = examples[indices]
+    sequences = sequences[indices]
+    seqlens = seqlens[indices]
+    
+    end_val_idx = int(num_examples * val_split)
+    val_dataset = (examples[:end_val_idx], sequences[:end_val_idx], seqlens[:end_val_idx])
+    train_dataset = (examples[end_val_idx:], sequences[end_val_idx:], seqlens[end_val_idx:])
+    print(len(val_dataset[0]), len(train_dataset[0]))
+    return train_dataset, val_dataset
+    
+    
+    
