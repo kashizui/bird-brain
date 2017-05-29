@@ -14,7 +14,7 @@ from six.moves import xrange as range
 import tensorflow as tf
 
 
-class CTCModel(Model):
+class QuantizedCTCModel(Model):
     """
     Implements a recursive neural network with a single hidden layer attached to CTC loss.
     This network will predict a sequence of TIMIT (e.g. z1039) for a given audio wav file.

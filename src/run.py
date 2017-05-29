@@ -1,11 +1,22 @@
-from basic_model import *
-from utils import *
+from models import Config, BatchSkipped
+from basic_model import CTCModel
+from quantized_model import QuantizedCTCModel
+from utils import load_dataset, split_train_and_val, make_batches, pad_sequences
+
+from time import gmtime, strftime
+import json
+import math
+import numpy as np
+import os
+import random
+import tensorflow as tf
+import time
 
 def choose_model(config):
     if config.model == 'basic':
         return CTCModel(config)
     elif config.model == 'quantized':
-        pass
+        return QuantizedCTCModel(config)
     return None
 
 def run_model():

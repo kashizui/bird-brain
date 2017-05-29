@@ -2,15 +2,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from six.moves.urllib.request import urlretrieve
 from six.moves import xrange as range
 from data import construct_string_to_index_mapping
 
-import os
-import pdb
-import sys
 import numpy as np
-import os.path
 import tensorflow as tf
 import _pickle as pickle
 
@@ -150,7 +145,6 @@ def split_train_and_val(dataset, val_split=0.1):
     end_val_idx = int(num_examples * val_split)
     val_dataset = (examples[:end_val_idx], sequences[:end_val_idx], seqlens[:end_val_idx])
     train_dataset = (examples[end_val_idx:], sequences[end_val_idx:], seqlens[end_val_idx:])
-    print(len(val_dataset[0]), len(train_dataset[0]))
     return train_dataset, val_dataset
     
     

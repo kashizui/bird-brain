@@ -42,7 +42,7 @@ class Config(argparse.Namespace):
     # To define a help string associated with a parameter just make it a tuple
     # with the second value as the help string.
     train_path = './data/train/train.dat', "Give path to training data - this should not need to be changed if you are running from the assignment directory"
-    test_path = './data/test/test.dat', "Give path to test data - this should not need to be changed if you are running from the assignment directory"
+    test_path = './data/test/test.dat', "Give path to val data - this should not need to be changed if you are running from the assignment directory"
     save_every = 50, "Save model every x epochs. 0 means not saving at all."
     print_every = 10, "Print some training and val examples (true and predicted sequences) every x epochs. 0 means not printing at all."
     save_to_file = 'models/saved_model_epoch', "Provide filename prefix for saving intermediate models"
@@ -65,7 +65,7 @@ class Config(argparse.Namespace):
     l2_lambda = 0.0000001
     learning_rate = 1e-3
     
-    model = "basic"
+    model = "basic", "Can be basic or quantized"
 
     # Define derived parameters as properties
     @property
