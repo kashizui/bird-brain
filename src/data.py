@@ -72,8 +72,8 @@ def construct_string_to_index_mapping():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Extracts MFCC features from corpus")
-    parser.add_argument("corpus_path", type=str, help="Path to corpus")
+    parser.add_argument("mfcc_path", type=str, help="Path to corpus")
     args = parser.parse_args()
     str_to_index = construct_string_to_index_mapping()
-    make_train(args.corpus_path)
-    make_test(args.corpus_path)
+    make_train(args.mfcc_path)
+    make_test(args.mfcc_path)
