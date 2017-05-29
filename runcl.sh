@@ -3,16 +3,12 @@
 #
 # Usage:
 #
-#   ./runcl.sh --learning-rate 1e-4 --num-epochs 100
+#   ./runcl.sh [--gpu] [--resume UUID EPOCH] [--host NODENAME] [ARGS [ARGS ...]]
 #
-# To use GPU:
-#
-#   ./runcl.sh --gpu --learning-rate 1e-4 --num-epochs 100
-#
-# To resume training an existing model:
-#
-#   ./runcl.sh [--gpu] --resume <uuid> <epoch> --learning-rate 1e-4 --num-epochs 100
-#
+# --gpu                 Use GPU
+# --resume UUID EPOCH   Resume training on the run with UUID from the specified EPOCH.
+# --host NODENAME       (codalab.stanford.edu only) Issue job to host with name NODENAME.
+# ARGS [ARGS ...]       Arguments to pass onto basic_model.py, like "--learning-rate 1e-4"
 
 IMAGE_VERSION=$(cat DOCKERIMAGEVERSION)
 IMAGE_NAME="sckoo/bird-brain:v$IMAGE_VERSION"
