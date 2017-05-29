@@ -77,7 +77,7 @@ class Config(argparse.Namespace):
     activation = 'relu', "Activation type for the recurrent layers [options: " + ', '.join(ACTIVATION_ALIAS.keys()) + "]"
     leaky_alpha = 0.01, "alpha value for leaky ReLU activation"
     clipped_mu = 1., "max value for clipped ReLU activation"
-    cell_type = 'GRUCell', "RNN cell type, can be any member of tf.contrib.rnn, such as GRUCell, LSTMCell, or BasicRNNCell"
+    cell_type = 'LSTMCell', "RNN cell type, can be any member of tf.contrib.rnn, such as GRUCell, LSTMCell, or BasicRNNCell"
 
     num_epochs = 50
     l2_lambda = 0.0000001
