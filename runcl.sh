@@ -25,6 +25,12 @@ for var in "$@"; do
         IMAGE_NAME="$IMAGE_NAME-gpu"
         OPTIONS="$OPTIONS --request-gpus 1"
         shift
+    elif [[ "$1" == "--host" ]]; then
+        # Using NLP cluster
+        host="$2"
+        OPTIONS="$OPTIONS --request-queue host=$host"
+        shift
+        shift
     elif [[ "$1" == "--resume" ]]; then
         uuid="$2"
         epoch="$3"
@@ -38,7 +44,7 @@ done
 
 
 # Ensure we're on the right worksheet
-cl work main::bird-brain >/dev/null
+# cl work main::bird-brain >/dev/null
 
 # Re-upload src if it's newer than the last uploaded bundle named "src"
 last_uploaded=$(date -r $(cl info -f created src) "+%Y%m%d%H%M")
@@ -49,7 +55,7 @@ if [[ $(find src -newer .last_uploaded | wc -c) -ne 0 ]]; then
 fi
 rm .last_uploaded
 
-command="cl run --tail $OPTIONS --request-docker-image $IMAGE_NAME $DEPENDENCIES :src :data --- python src/basic_model.py $RUNARGS ${@}"
+command="cl run --tail -n run-train $OPTIONS --request-docker-image $IMAGE_NAME $DEPENDENCIES :src :data --- python src/basic_model.py $RUNARGS ${@}"
 echo $command
 printf "New run bundle uuid: "
 $command
