@@ -25,6 +25,7 @@ def process_switchboard(path, output_path):
                 full_path = sph_to_wav(dirpath, filename, output_path)
                 wave, sr = librosa.load(full_path, mono=True, sr=16000)
                 mfcc_features = librosa.feature.mfcc(wave, sr=sr, n_mfcc=12)
+                print(wave.shape)
                 delta_features = librosa.feature.delta(mfcc_features, order=1)
                 output_filename = os.path.join(output_path, filename[:-4] + "_mfcc")
                 concat_features = np.concatenate((mfcc_features, delta_features), axis=0)
@@ -44,10 +45,11 @@ def process_timit(path, output_path):
             if filename[-4:] == ".wav":
                 full_path = os.path.join(dirpath, filename)
                 wave, sr = librosa.load(full_path, mono=True, sr=16000)
-                mfcc_features = librosa.feature.mfcc(wave, sr=sr, n_mfcc=12)
+                mfcc_features = librosa.feature.mfcc(wave, sr=sr, n_mfcc=12,hop_length=256)
                 delta_features = librosa.feature.delta(mfcc_features, order=1)
                 output_filename = os.path.join(dirpath, filename[:-4] + "_mfcc")
                 concat_features = np.concatenate((mfcc_features, delta_features), axis=0)
+                print(concat_features.shape)
                 np.save(output_filename, concat_features, allow_pickle=False)
                 
 def process_timit_psf(path, output_path):
@@ -56,12 +58,13 @@ def process_timit_psf(path, output_path):
             if filename[-4:] == ".wav":
                 full_path = os.path.join(dirpath, filename)
                 wave, sr = librosa.load(full_path, mono=True, sr=16000)
-                mfcc_features = python_speech_features.mfcc(wave, samplerate=sr, numcep=13, nfilt=26, appendEnergy=True)
+                mfcc_features = python_speech_features.mfcc(wave, samplerate=sr, numcep=13, nfilt=26, appendEnergy=True, winlen=0.025, winstep=0.01)
                 delta_features = python_speech_features.delta(mfcc_features, 9)
                 
                 output_filename = os.path.join(dirpath, filename[:-4] + "_mfcc")
                 print(output_filename)
                 concat_features = np.concatenate((mfcc_features, delta_features), axis=1).T
+                print(concat_features.shape)
                 np.save(output_filename, concat_features, allow_pickle=False)
                 
 def write_output():
