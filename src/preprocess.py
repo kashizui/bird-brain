@@ -60,7 +60,8 @@ def process_timit_psf(path, output_path):
                 delta_features = python_speech_features.delta(mfcc_features, 9)
                 
                 output_filename = os.path.join(dirpath, filename[:-4] + "_mfcc")
-                concat_features = np.concatenate((mfcc_features, delta_features), axis=0)
+                print(output_filename)
+                concat_features = np.concatenate((mfcc_features, delta_features), axis=1).T
                 np.save(output_filename, concat_features, allow_pickle=False)
                 
 def write_output():
