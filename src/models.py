@@ -56,7 +56,7 @@ class Config(argparse.Namespace):
     hidden_size = 128
     num_hidden_layers = 1
 
-    activation = 'relu', "Activation type for the recurrent layers [options: " + ', '.join(ACTIVATION_ALIAS.keys()) + "]"
+    activation = 'tanh', "Activation type for the recurrent layers [options: " + ', '.join(ACTIVATION_ALIAS.keys()) + "]"
     leaky_alpha = 0.01, "alpha value for leaky ReLU activation"
     clipped_mu = 1., "max value for clipped ReLU activation"
     cell_type = 'LSTMCell', "RNN cell type, can be any member of tf.contrib.rnn, such as GRUCell, LSTMCell, or BasicRNNCell"
