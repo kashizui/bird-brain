@@ -2,7 +2,7 @@ import tensorflow as tf
 import argparse
 import json
 
-from utils import compare_predicted_to_true
+from utils import compare_predicted_to_true, compute_wer
 
 class BatchSkipped(Exception): pass
 
@@ -43,13 +43,14 @@ class Config(argparse.Namespace):
     # with the second value as the help string.
     train_path = './data/train/train.dat', "Give path to training data - this should not need to be changed if you are running from the assignment directory"
     test_path = './data/test/test.dat', "Give path to val data - this should not need to be changed if you are running from the assignment directory"
-    save_every = 50, "Save model every x epochs. 0 means not saving at all."
+    phase = 'train'
+    save_every = 10, "Save model every x epochs. 0 means not saving at all."
     print_every = 10, "Print some training and val examples (true and predicted sequences) every x epochs. 0 means not printing at all."
     save_to_file = 'models/saved_model_epoch', "Provide filename prefix for saving intermediate models"
     load_from_file = None, "Provide filename to load saved model"
 
     context_size = 0
-    num_mfcc_features = 24
+    num_mfcc_features = 26
 
     batch_size = 16
     num_classes = 28  # 11 (TIDIGITS - 0-9 + oh) + 1 (blank) = 12
@@ -201,26 +202,26 @@ class Model(object):
         Also, report the mean WER over the batch in variable wer
 
         """
-        result = tf.nn.ctc_beam_search_decoder(
+        decoded, log_probability = tf.nn.ctc_beam_search_decoder(
             self.logitsT,
             self.seq_lens_placeholder,
             top_paths=1,
         )
-        decoded_sequence = tf.to_int32(result[0][0])
+        decoded_sequence = tf.to_int32(decoded[0])
 
         # FIXME: Calculate actual WER?
         # edit_distance is no longer a proxy for WER, this is now character error rate
-        wer = tf.reduce_mean(tf.edit_distance(
+        ler = tf.reduce_mean(tf.edit_distance(
             hypothesis=decoded_sequence,
             truth=self.targets_placeholder,
             normalize=True,
         ))
-
+        
         tf.summary.scalar("loss", self.loss)
-        tf.summary.scalar("wer", wer)
+        tf.summary.scalar("ler", ler)
 
         self.decoded_sequence = decoded_sequence
-        self.wer = wer
+        self.wer = ler
      
     def add_summary_op(self):
         self.merged_summary_op = tf.summary.merge_all()
@@ -243,6 +244,8 @@ class Model(object):
         train_feed = self.create_feed_dict(train_inputs_batch, train_targets_batch, train_seq_len_batch)
         train_first_batch_preds = session.run(self.decoded_sequence, feed_dict=train_feed)
         compare_predicted_to_true(train_first_batch_preds, train_targets_batch)
+        result = compute_wer(train_first_batch_preds, train_targets_batch)
+        print("WER {:.3f}".format(result))
     
     def __init__(self, config):
         pass
