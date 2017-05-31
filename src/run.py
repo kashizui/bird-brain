@@ -100,11 +100,6 @@ def train_model(config):
                 if config.save_every > 0 and config.save_to_file and (curr_epoch + 1) % config.save_every == 0:
                     os.makedirs(os.path.dirname(config.save_to_file), exist_ok=True)
                     saver.save(session, config.save_to_file, global_step=curr_epoch + 1)
-                all_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
-                for v in all_vars:
-                    print(v)
-                    v_ = session.run(v)
-                    print(v_)
 
 def test_model(config):
     logs_path = "tensorboard/" + strftime("test_%Y_%m_%d_%H_%M_%S", gmtime())
@@ -126,11 +121,6 @@ def test_model(config):
             if config.load_from_file is not None:
                 new_saver = tf.train.Saver(tf.global_variables()) # tf.train.import_meta_graph('%s.meta'%config.load_from_file, clear_devices=True)
                 new_saver.restore(session, tf.train.latest_checkpoint('models/'))
-                all_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
-                for v in all_vars:
-                    print(v)
-                    v_ = session.run(v)
-                    print(v_)
             else:
                 print("No checkpoint to load for test.")
                 return
