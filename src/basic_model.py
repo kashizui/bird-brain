@@ -433,6 +433,7 @@ def main():
             if config.load_from_file is not None:
                 new_saver = tf.train.import_meta_graph('%s.meta'%config.load_from_file, clear_devices=True)
                 new_saver.restore(session, config.load_from_file)
+                print("Loaded model from %s" % config.load_from_file)
 
             train_writer = tf.summary.FileWriter(logs_path + '/train', session.graph)
 
