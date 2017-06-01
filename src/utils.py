@@ -2,18 +2,13 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from six.moves.urllib.request import urlretrieve
 from six.moves import xrange as range
 from data import construct_string_to_index_mapping
 
-import os
-import pdb
-import sys
 import numpy as np
-import os.path
 import tensorflow as tf
 import _pickle as pickle
-
+import editdistance
 
 def sparse_tuple_from(sequences, dtype=np.int32):
     """Create a sparse representention of x.
@@ -136,3 +131,34 @@ def make_batches(dataset, batch_size=16):
         seqlens.append(l3[i:i + batch_size])
 
     return examples, sequences, seqlens
+
+def split_train_and_val(dataset, val_split=0.1):
+    num_examples = len(dataset[0])
+    examples = np.asarray(dataset[0])
+    sequences = np.asarray(dataset[1])
+    seqlens = np.asarray(dataset[2])
+    
+    indices = np.random.permutation(num_examples)
+    examples = examples[indices]
+    sequences = sequences[indices]
+    seqlens = seqlens[indices]
+    
+    end_val_idx = int(num_examples * val_split)
+    val_dataset = (examples[:end_val_idx], sequences[:end_val_idx], seqlens[:end_val_idx])
+    train_dataset = (examples[end_val_idx:], sequences[end_val_idx:], seqlens[end_val_idx:])
+    return train_dataset, val_dataset
+    
+def compute_wer(preds, trues):
+    inv_index_mapping = {v: k for k, v in
+                         construct_string_to_index_mapping().items()}
+
+    preds = tf.sparse_tensor_to_dense(preds, default_value=-1).eval()
+    trues = tf.sparse_tensor_to_dense(
+        tf.SparseTensor(indices=trues[0], values=trues[1],
+                        dense_shape=trues[2]), default_value=-1).eval()
+    wer = []
+    for true, pred in zip(trues, preds):
+        predicted_label = "".join([inv_index_mapping[ch] for ch in pred if ch != -1])
+        true_label = "".join([inv_index_mapping[ch] for ch in true if ch != -1])
+        wer.append(editdistance.eval(predicted_label.split(), true_label.split()) / len(true_label.split()))
+    return np.mean(wer)

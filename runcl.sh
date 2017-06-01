@@ -51,7 +51,7 @@ if [[ $(find src -newer .last_uploaded | wc -c) -ne 0 ]]; then
 fi
 rm .last_uploaded
 
-command="cl run --tail -n run-train $OPTIONS --request-docker-image $IMAGE_NAME $DEPENDENCIES :src :data --- python src/basic_model.py $RUNARGS ${@}"
+command="cl run --tail -n run-train $OPTIONS --request-docker-image $IMAGE_NAME $DEPENDENCIES :src :newdata --- python src/run.py $RUNARGS ${@}"
 echo $command
 printf "New run bundle uuid: "
 $command
