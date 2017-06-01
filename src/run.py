@@ -120,7 +120,7 @@ def test_model(config):
             
             if config.load_from_file is not None:
                 new_saver = tf.train.Saver(tf.global_variables()) # tf.train.import_meta_graph('%s.meta'%config.load_from_file, clear_devices=True)
-                new_saver.restore(session, tf.train.latest_checkpoint('models/'))
+                new_saver.restore(session, config.load_from_file)
             else:
                 print("No checkpoint to load for test.")
                 return
