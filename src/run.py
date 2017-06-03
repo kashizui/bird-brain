@@ -52,8 +52,10 @@ def train_model(config):
 
             step_ii = 0
             
-            input_graph_name = "models/input_graph.pb"
-            tf.train.write_graph(session.graph_def, "", input_graph_name)
+            if config.save_every > 0 and config.save_to_file:
+                os.makedirs(os.path.dirname(config.save_to_file), exist_ok=True)
+                input_graph_name = os.path.join(os.path.dirname(config.save_to_file), "input_graph.pb")
+                tf.train.write_graph(session.graph_def, "", input_graph_name)
 
             for curr_epoch in range(config.num_epochs):
                 total_train_cost = total_train_wer = 0
