@@ -6,3 +6,4 @@ LDC93S1_TIMIT-Acoustic-Phonetic-Continuous-Speech-Corpus/
 .idea/
 venv/
 config.json
+models/

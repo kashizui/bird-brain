@@ -1,7 +1,7 @@
-from models import Config, BatchSkipped
-from basic_model import CTCModel
-from quantized_model import QuantizedCTCModel
+from models import BatchSkipped
+from config import Config
 from utils import load_dataset, split_train_and_val, make_batches, pad_sequences
+import factorized
 
 from time import gmtime, strftime
 import json
@@ -12,12 +12,6 @@ import random
 import tensorflow as tf
 import time
 
-def choose_model(config):
-    if config.model == 'basic':
-        return CTCModel(config)
-    elif config.model == 'quantized':
-        return QuantizedCTCModel(config)
-    return None
 
 def pad_all_batches(batch_feature_array):
     for batch_num in range(len(batch_feature_array)):
@@ -41,7 +35,7 @@ def train_model(config):
     num_batches_per_epoch = int(math.ceil(num_examples / Config.batch_size))
 
     with tf.Graph().as_default():
-        model = choose_model(config)
+        model = config.get_model()
         init = tf.global_variables_initializer()
 
         saver = tf.train.Saver(tf.global_variables())
@@ -114,7 +108,7 @@ def test_model(config):
     print(num_examples, num_batches_per_epoch)
 
     with tf.Graph().as_default():
-        model = choose_model(config)
+        model = config.get_model()
         with tf.Session() as session:
             # Initializate the weights and biases
             
@@ -159,7 +153,7 @@ def test_model(config):
                     'test_ed': float(test_wer),
                 }, fp)
     
-def main(args):
+def main():
     config = Config()
     config.save('config.json')
     print(config)
@@ -167,6 +161,10 @@ def main(args):
         train_model(config)
     elif config.phase == 'test':
         test_model(config)
+    elif config.phase == 'factorize':
+        factorized.factorize(config)
+    else:
+        raise Exception('unknown phase %r' % config.phase)
     
 if __name__ == "__main__":
-    tf.app.run()
+    main()
