@@ -12,6 +12,8 @@
 
 IMAGE_VERSION=$(cat DOCKERIMAGEVERSION)
 IMAGE_NAME="sckoo/bird-brain:v$IMAGE_VERSION"
+DATA_BUNDLE=data26
+SRC_BUNDLE=src26
 OPTIONS=""
 DEPENDENCIES=""
 RUNARGS=""
@@ -40,18 +42,18 @@ done
 
 
 # Ensure we're on the right worksheet
-# cl work main::bird-brain >/dev/null
+cl work main::bird-brain >/dev/null
 
 # Re-upload src if it's newer than the last uploaded bundle named "src"
-last_uploaded=$(date -r $(cl info -f created src) "+%Y%m%d%H%M")
+last_uploaded=$(date -r $(cl info -f created $SRC_BUNDLE) "+%Y%m%d%H%M")
 touch -t $last_uploaded .last_uploaded
 if [[ $(find src -newer .last_uploaded | wc -c) -ne 0 ]]; then
-    echo "Changes found since src was last uploaded..."
-    cl upload src
+    echo "Changes found since src (=>$SRC_BUNDLE) was last uploaded..."
+    cl upload src -n $SRC_BUNDLE
 fi
 rm .last_uploaded
 
-command="cl run --tail -n run-train $OPTIONS --request-docker-image $IMAGE_NAME $DEPENDENCIES :src :newdata --- python src/run.py $RUNARGS ${@}"
+command="cl run --tail -n run-train $OPTIONS --request-docker-image $IMAGE_NAME $DEPENDENCIES src:$SRC_BUNDLE data:$DATA_BUNDLE --- python src/run.py $RUNARGS ${@}"
 echo $command
 printf "New run bundle uuid: "
 $command

@@ -1,8 +1,10 @@
 import tensorflow as tf
 import argparse
 import json
+import os
+import warnings
 
-from basic_model import CTCModel
+from basic_model import CTCModel, CTCModelNoSum
 from quantized_model import QuantizedCTCModel
 from layers import leaky_relu, clipped_relu
 
@@ -73,6 +75,8 @@ class Config(argparse.Namespace):
     def get_model(self):
         if self.model == 'basic':
             return CTCModel(self)
+        if self.model == 'nosum':
+            return CTCModelNoSum(self)
         elif self.model == 'quantized':
             return QuantizedCTCModel(self)
         raise Exception('unknown model type %r' % (self.model,))
@@ -139,5 +143,7 @@ class Config(argparse.Namespace):
 
     def save(self, path):
         """Save config to JSON file."""
+        if os.path.exists(path):
+            warnings.warn('Overwriting config at %s' % path)
         with open(path, 'w') as fp:
             json.dump(vars(self), fp)
