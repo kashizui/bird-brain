@@ -89,39 +89,6 @@ class CTCModel(Model):
                 inputs=scores,
                 output_size=self.config.num_classes)
 
-    def add_loss_op(self):
-        """Adds Ops for the loss function to the computational graph.
-
-        - Use tf.nn.ctc_loss to calculate the CTC loss for each example in the batch. You'll need self.logits,
-          self.targets_placeholder, self.seq_lens_placeholder for this. Set variable ctc_loss to
-          the output of tf.nn.ctc_loss
-        - You will need to first tf.transpose the data so that self.logits is shaped [max_timesteps, batch_s,
-          num_classes].
-        - self.configure tf.nn.ctc_loss so that identical consecutive labels are allowed
-        - Compute L2 regularization cost for all trainable variables. Use tf.nn.l2_loss(var).
-
-        """
-        # logitsT.shape = [max_timesteps, batch_s, num_classes]
-        self.logitsT = tf.transpose(self.logits, perm=[1, 0, 2])
-
-        ctc_loss = tf.nn.ctc_loss(
-            labels=self.targets_placeholder,
-            inputs=self.logitsT,
-            sequence_length=self.seq_lens_placeholder,
-            preprocess_collapse_repeated=False,  # FIXME?
-            ctc_merge_repeated=True,
-        )
-
-        # Accumulate l2 cost over the weight matrices
-        l2_cost = tf.add_n([tf.nn.l2_loss(var) for var in tf.trainable_variables()])
-
-        # Remove inf cost training examples (no path found, yet)
-        loss_without_invalid_paths = tf.boolean_mask(ctc_loss, tf.less(ctc_loss, tf.constant(10000.)))
-        self.num_valid_examples = tf.cast(tf.shape(loss_without_invalid_paths)[0], tf.int32)
-        cost = tf.reduce_mean(loss_without_invalid_paths)
-
-        self.loss = self.config.l2_lambda * l2_cost + cost
-
     def add_training_op(self):
         """Sets up the training Ops.
 
