@@ -43,7 +43,7 @@ def make_dataset(path, output, phone):
                 else:
                     label_filename = filename.split("_")[0] + ".txt"
                     l2.append(get_label(os.path.join(dirpath, label_filename)))
-                print(data.shape)
+                #print(data.shape)
                 l3.append(len(data))
     dataset = (l1, l2, l3)
     with open(output, "wb") as f:
@@ -58,6 +58,19 @@ def get_label(path):
         label_string = " ".join(split_line).lower()
         return string_to_index_mapping(label_string)
 
+def get_char_phone_label(path):
+    labels = []
+    with open(path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if '#h' in line or 'h#' in line:
+                continue
+            #line = line.translate(line.maketrans('', '', punctuation))
+            word = line.split(" ")[2]
+            labels.append(word)
+    label_string = " ".join(labels).lower()
+    return string_to_index_mapping(label_string.split(" "))
+
 def get_phone_label(path):
     labels = []
     with open(path, "r") as f:
@@ -65,17 +78,36 @@ def get_phone_label(path):
             line = line.strip()
             if '#h' in line or 'h#' in line:
                 continue
-            line = line.translate(line.maketrans('', '', punctuation))
-            word = line.split(" ")[2]
+            #line = line.translate(line.maketrans('', '', punctuation))
+            word = line.split(" ")[2].lower()
             labels.append(word)
-    label_string = " ".join(labels).lower()
-    return string_to_index_mapping(label_string)
+    labels = [char_to_index_mapping(l) for l in labels]
+    space = char_to_index_mapping(" ")
+    result = [space] * (len(labels) * 2 - 1)
+    result[0::2] = labels
+    return result
 
-def string_to_index_mapping(label_string):
-    return [str_to_index[c] for c in label_string]
-
+def char_to_index_mapping(c):
+    return str(str_to_index[c])
 
 def construct_string_to_index_mapping():
+    str_to_index = {}
+    offset = 0
+    with open(os.path.join(os.path.dirname(__file__), "timit_phones.txt"), "r") as tp:
+        for line in tp:
+            phone = line.strip()
+            str_to_index[phone] = offset
+            offset += 1
+    str_to_index[" "] = offset
+    str_to_index["_"] = offset + 1
+    return str_to_index
+
+def string_to_index_mapping(label_string):
+    ''' Original method '''
+    return [str_to_index[c] for c in label_string]
+    
+def construct_char_string_to_index_mapping():
+    ''' Original method '''
     str_to_index = {}
     offset = ord("a")
     for c in ascii_lowercase:
@@ -83,6 +115,7 @@ def construct_string_to_index_mapping():
     str_to_index[" "] = ord("z") - offset + 1
     str_to_index["_"] = ord("z") - offset + 2
     return str_to_index
+
 
 
 if __name__ == "__main__":

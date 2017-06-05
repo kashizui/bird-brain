@@ -43,7 +43,7 @@ class Config(argparse.Namespace):
     num_mfcc_features = 26
 
     batch_size = 16
-    num_classes = 28  # 11 (TIDIGITS - 0-9 + oh) + 1 (blank) = 12
+    num_classes = 28 # 62  # 11 (TIDIGITS - 0-9 + oh) + 1 (blank) = 12
     hidden_size = 128
     num_hidden_layers = 1
 
