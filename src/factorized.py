@@ -14,6 +14,25 @@ class FactorizedCTCModel(CTCModel):
     This network will predict a sequence of TIMIT (e.g. z1039) for a given audio wav file.
     """
 
+    def _project_final(self, inputs, output_size, P, bias=True):
+        # inputs.shape = [batch_s, max_timestep, input_size]
+        input_size = inputs.shape.as_list()[2]
+        inputs_shape = tf.shape(inputs)  # get shape at runtime as well for batch_s and max_timestep
+
+        Z = tf.get_variable('Z', shape=[input_size, output_size], initializer=tf.contrib.layers.xavier_initializer())
+        if bias:
+            b = tf.get_variable('b', shape=[output_size])
+
+        # Flatten the sequence into a long matrix and apply affine transform
+        inputs_flat = tf.reshape(inputs, [-1, input_size])      # shape = [batch_s * max_timestep, input_size]
+        if bias:
+            outputs_flat = tf.matmul(tf.matmul(inputs_flat, P), Z) + b        # shape = [batch_s * max_timestep, output_size]
+        else:
+            outputs_flat = tf.matmul(tf.matmul(inputs_flat, P), Z)            # shape = [batch_s * max_timestep, output_size]
+        outputs = tf.reshape(outputs_flat, [inputs_shape[0], inputs_shape[1], output_size])  # shape = [batch_s, max_timestep, output_size]
+
+        return outputs
+
     def add_prediction_op(self):
         """Applies a GRU RNN over the input data, then an affine layer projection. Steps to complete
         in this function:
@@ -40,12 +59,12 @@ class FactorizedCTCModel(CTCModel):
         # Construct forward and backward cells of bidirectional RNN
         fwdcell = FactorizedLSTMCell(
             self.config.hidden_size,
-            self.config.svd_rank,
+            num_proj=self.config.svd_rank,
             activation=self.config.activation_func,
         )
         bckcell = FactorizedLSTMCell(
             self.config.hidden_size,
-            self.config.svd_rank,
+            num_proj=self.config.svd_rank,
             activation=self.config.activation_func,
         )
         # TODO: look into non-zero initial hidden states?
@@ -55,16 +74,32 @@ class FactorizedCTCModel(CTCModel):
             dtype=tf.float32,
             sequence_length=self.seq_lens_placeholder)
 
-        # Sum the forward and backward hidden states together for the scores
-        # scores.shape = [batch_s, max_timestep, 2*num_hidden]
-        scores = tf.concat([rnn_outputs[0], rnn_outputs[1]], axis=2, name='scores')
+        # Reuse projection matrices
+        with tf.variable_scope('final'):
+            with tf.variable_scope('fw'):
+                fw_logits = self.apply_affine_over_sequence(
+                    inputs=rnn_outputs[0],
+                    output_size=self.config.num_classes,
+                    bias=True,
+                )
+            with tf.variable_scope('bw'):
+                bw_logits = self.apply_affine_over_sequence(
+                    inputs=rnn_outputs[1],
+                    output_size=self.config.num_classes,
+                    bias=False,
+                )
+            self.logits = fw_logits + bw_logits
 
-        # Push the scores through an affine layer
-        # logits.shape = [batch_s, max_timestep, num_classes]
-        with tf.variable_scope('final') as vs:
-            self.logits = self.apply_affine_over_sequence(
-                inputs=scores,
-                output_size=self.config.num_classes)
+        # # Sum the forward and backward hidden states together for the scores
+        # # scores.shape = [batch_s, max_timestep, 2*num_hidden]
+        # scores = tf.concat([rnn_outputs[0], rnn_outputs[1]], axis=2, name='scores')
+        #
+        # # Push the scores through an affine layer
+        # # logits.shape = [batch_s, max_timestep, num_classes]
+        # with tf.variable_scope('final') as vs:
+        #     self.logits = self.apply_affine_over_sequence(
+        #         inputs=scores,
+        #         output_size=self.config.num_classes)
 
 # load instance of basic_model and extract weights
 # run SVD to factorize RNN weight matrices
@@ -84,7 +119,6 @@ def svd_truncate(X, r):
 
     """
     U, s, W = np.linalg.svd(X, full_matrices=False)
-    print(s)
     U_trunc = U[:, :r]
     S_trunc = np.diag(s[:r])
     W_trunc = W[:r, :]
@@ -98,6 +132,29 @@ def svd_truncate(X, r):
     # print(np.std(diff), np.max(diff))
 
     return Z, P
+
+
+def min_frobenius(P, W, tol=1e-3):
+    """Find argmin_Y ||YP - W||_fro"""
+    with tf.Graph().as_default():
+        Z = tf.Variable(tf.random_normal([W.shape[0], P.shape[0]]))  # fixme: zero init bad?
+        loss = tf.norm(tf.matmul(Z, P) - W, ord='euclidean')  # equivalent to frobenius
+        train_step = tf.train.AdamOptimizer(0.01).minimize(loss)  # fixme: try another optimizer?
+
+        with tf.Session() as session:
+            session.run(tf.global_variables_initializer())
+
+            curr_loss = float('inf')
+            while True:
+                prev_loss = curr_loss
+                session.run(train_step)
+                curr_loss = session.run(loss)
+                print('\r', abs(curr_loss - prev_loss), curr_loss, end='')
+                if abs(curr_loss - prev_loss) < tol:
+                    print()
+                    break
+
+            return session.run(Z)
 
 
 def pick_variable(name):
@@ -147,7 +204,13 @@ def factorize(config):
             print('Z_fw_recurrent.shape =', Z_fw_recurrent.shape)
             print('Z_bw_recurrent.shape =', Z_bw_recurrent.shape)
 
+
             # TODO: Compute least-squares
+            Z_fw_project = min_frobenius(P_fw, w_fw_project)
+            Z_bw_project = min_frobenius(P_bw, w_bw_project)
+            b_project = session.run("final/b:0")
+            print('Z_fw_project.shape =', Z_fw_project.shape)
+            print('Z_bw_project.shape =', Z_bw_project.shape)
 
 
     # Instantiate a factorized version of the model
@@ -155,7 +218,8 @@ def factorize(config):
         model = FactorizedCTCModel(config)
 
         variables_to_restore = [v for v in tf.global_variables()
-                                if not re.match(r"bidirectional_rnn/[fb]w/lstm_cell/((anti_)?proj_)?weights(.*)", v.name)]
+                                if not re.match(r"bidirectional_rnn/[fb]w/lstm_cell/((anti)?projection/)?weights(.*)", v.name)
+                                and not re.match(r"final/(.*)", v.name)]
         restorer = tf.train.Saver(variables_to_restore)
         saver = tf.train.Saver(tf.global_variables())
 
@@ -166,12 +230,16 @@ def factorize(config):
             restorer.restore(session, config.load_from_file)
 
             pick_variable("bidirectional_rnn/fw/lstm_cell/weights:0").load(w_fw_cell[:num_units, :])
-            pick_variable("bidirectional_rnn/fw/lstm_cell/proj_weights:0").load(P_fw.T)
-            pick_variable("bidirectional_rnn/fw/lstm_cell/anti_proj_weights:0").load(Z_fw_recurrent.T)
+            pick_variable("bidirectional_rnn/fw/lstm_cell/projection/weights:0").load(P_fw.T)
+            pick_variable("bidirectional_rnn/fw/lstm_cell/antiprojection/weights:0").load(Z_fw_recurrent.T)
 
             pick_variable("bidirectional_rnn/bw/lstm_cell/weights:0").load(w_bw_cell[:num_units, :])
-            pick_variable("bidirectional_rnn/bw/lstm_cell/proj_weights:0").load(P_bw.T)
-            pick_variable("bidirectional_rnn/bw/lstm_cell/anti_proj_weights:0").load(Z_bw_recurrent.T)
+            pick_variable("bidirectional_rnn/bw/lstm_cell/projection/weights:0").load(P_bw.T)
+            pick_variable("bidirectional_rnn/bw/lstm_cell/antiprojection/weights:0").load(Z_bw_recurrent.T)
+
+            pick_variable("final/fw/W:0").load(Z_fw_project.T)
+            pick_variable("final/bw/W:0").load(Z_bw_project.T)
+            pick_variable("final/fw/b:0").load(b_project)
 
             os.makedirs(os.path.dirname(config.save_to_file), exist_ok=True)
             saver.save(session, config.save_to_file)

@@ -20,17 +20,21 @@ class CTCModel(Model):
     This network will predict a sequence of TIMIT (e.g. z1039) for a given audio wav file.
     """
 
-    def apply_affine_over_sequence(self, inputs, output_size, activation=None):
+    def apply_affine_over_sequence(self, inputs, output_size, activation=None, bias=True):
         # inputs.shape = [batch_s, max_timestep, input_size]
         input_size = inputs.shape.as_list()[2]
         inputs_shape = tf.shape(inputs)  # get shape at runtime as well for batch_s and max_timestep
 
         W = tf.get_variable('W', shape=[input_size, output_size], initializer=tf.contrib.layers.xavier_initializer())
-        b = tf.get_variable('b', shape=[output_size])
+        if bias:
+            b = tf.get_variable('b', shape=[output_size])
 
         # Flatten the sequence into a long matrix and apply affine transform
         inputs_flat = tf.reshape(inputs, [-1, input_size])      # shape = [batch_s * max_timestep, input_size]
-        outputs_flat = tf.matmul(inputs_flat, W) + b            # shape = [batch_s * max_timestep, output_size]
+        if bias:
+            outputs_flat = tf.matmul(inputs_flat, W) + b            # shape = [batch_s * max_timestep, output_size]
+        else:
+            outputs_flat = tf.matmul(inputs_flat, W)                # shape = [batch_s * max_timestep, output_size]
         outputs = tf.reshape(outputs_flat, [inputs_shape[0], inputs_shape[1], output_size])  # shape = [batch_s, max_timestep, output_size]
 
         if activation is not None:
