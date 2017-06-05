@@ -4,7 +4,7 @@ import re
 import tensorflow as tf
 import numpy as np
 
-from basic_model import CTCModel
+from basic_model import CTCModel, CTCModelNoSum
 from layers import FactorizedLSTMCell
 
 
@@ -84,9 +84,11 @@ def svd_truncate(X, r):
 
     """
     U, s, W = np.linalg.svd(X, full_matrices=False)
+    print(s)
     U_trunc = U[:, :r]
     S_trunc = np.diag(s[:r])
     W_trunc = W[:r, :]
+
     Z = np.dot(U_trunc, S_trunc)
     P = W_trunc
 
@@ -122,10 +124,6 @@ def factorize(config):
                 raise Exception('specify model with --load-from-file')
             saver = tf.train.import_meta_graph('%s.meta' % config.load_from_file, clear_devices=True)
             saver.restore(session, config.load_from_file)
-            session.run(tf.global_variables_initializer())
-
-            for v in tf.trainable_variables():
-                print(v.name)
 
             # TODO: measure model size (num parameters, bytes)
 
@@ -155,6 +153,7 @@ def factorize(config):
     # Instantiate a factorized version of the model
     with tf.Graph().as_default() as g_factorized:
         model = FactorizedCTCModel(config)
+
         variables_to_restore = [v for v in tf.global_variables()
                                 if not re.match(r"bidirectional_rnn/[fb]w/lstm_cell/((anti_)?proj_)?weights(.*)", v.name)]
         restorer = tf.train.Saver(variables_to_restore)
@@ -165,8 +164,6 @@ def factorize(config):
         with tf.Session(graph=g_factorized) as session:
             session.run(tf.global_variables_initializer())
             restorer.restore(session, config.load_from_file)
-            for v in tf.global_variables():
-                print(v.name)
 
             pick_variable("bidirectional_rnn/fw/lstm_cell/weights:0").load(w_fw_cell[:num_units, :])
             pick_variable("bidirectional_rnn/fw/lstm_cell/proj_weights:0").load(P_fw.T)
