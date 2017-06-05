@@ -15,8 +15,29 @@ from tensorflow.contrib.rnn.python.ops.core_rnn_cell_impl import (
 )
 
 from tensorflow.python.platform import tf_logging as logging
-from tensorflow.python.util import nest
 
+
+def dense(inputs, output_size, activation=None, bias=True):
+    # inputs.shape = [batch_s, max_timestep, input_size]
+    input_size = inputs.shape.as_list()[2]
+    inputs_shape = tf.shape(inputs)  # get shape at runtime as well for batch_s and max_timestep
+
+    W = tf.get_variable('W', shape=[input_size, output_size], initializer=tf.contrib.layers.xavier_initializer())
+    if bias:
+        b = tf.get_variable('b', shape=[output_size])
+
+    # Flatten the sequence into a long matrix and apply affine transform
+    inputs_flat = tf.reshape(inputs, [-1, input_size])      # shape = [batch_s * max_timestep, input_size]
+    if bias:
+        outputs_flat = tf.matmul(inputs_flat, W) + b            # shape = [batch_s * max_timestep, output_size]
+    else:
+        outputs_flat = tf.matmul(inputs_flat, W)                # shape = [batch_s * max_timestep, output_size]
+    outputs = tf.reshape(outputs_flat, [inputs_shape[0], inputs_shape[1], output_size])  # shape = [batch_s, max_timestep, output_size]
+
+    if activation is not None:
+        outputs = activation(outputs)
+
+    return outputs
 
 
 def leaky_relu(alpha):

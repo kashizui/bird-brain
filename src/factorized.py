@@ -4,8 +4,8 @@ import re
 import tensorflow as tf
 import numpy as np
 
-from basic_model import CTCModel, CTCModelNoSum
-from layers import FactorizedLSTMCell
+from basic_model import CTCModel
+import layers
 
 
 class FactorizedCTCModel(CTCModel):
@@ -51,18 +51,18 @@ class FactorizedCTCModel(CTCModel):
         inputs = self.inputs_placeholder
         for i in range(self.config.num_hidden_layers):
             with tf.variable_scope('hidden%d' % (i + 1)) as vs:
-                inputs = self.apply_affine_over_sequence(
+                inputs = layers.dense(
                     inputs=inputs,
                     output_size=self.config.hidden_size,
                     activation=tf.nn.relu)
 
         # Construct forward and backward cells of bidirectional RNN
-        fwdcell = FactorizedLSTMCell(
+        fwdcell = layers.FactorizedLSTMCell(
             self.config.hidden_size,
             num_proj=self.config.svd_rank,
             activation=self.config.activation_func,
         )
-        bckcell = FactorizedLSTMCell(
+        bckcell = layers.FactorizedLSTMCell(
             self.config.hidden_size,
             num_proj=self.config.svd_rank,
             activation=self.config.activation_func,
@@ -77,13 +77,13 @@ class FactorizedCTCModel(CTCModel):
         # Reuse projection matrices
         with tf.variable_scope('final'):
             with tf.variable_scope('fw'):
-                fw_logits = self.apply_affine_over_sequence(
+                fw_logits = layers.dense(
                     inputs=rnn_outputs[0],
                     output_size=self.config.num_classes,
                     bias=True,
                 )
             with tf.variable_scope('bw'):
-                bw_logits = self.apply_affine_over_sequence(
+                bw_logits = layers.dense(
                     inputs=rnn_outputs[1],
                     output_size=self.config.num_classes,
                     bias=False,
