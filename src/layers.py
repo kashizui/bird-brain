@@ -25,7 +25,6 @@ from tensorflow.contrib.rnn.python.ops.core_rnn_cell_impl import (
     _checked_scope,
     _linear,
     _BIAS_VARIABLE_NAME,
-    _WEIGHTS_VARIABLE_NAME,
     LSTMStateTuple,
 )
 
@@ -47,7 +46,7 @@ def clipped_relu(mu):
     return apply
 
 
-def _factorized_linear(args, output_size, bias, bias_start=0.0):
+def _factorized_linear(args, output_size, rank, bias, bias_start=0.0):
     """Linear map: sum_i(args[i] * Z[i] * P[i]), where W[i] is a variable.
 
     Args:
@@ -85,12 +84,14 @@ def _factorized_linear(args, output_size, bias, bias_start=0.0):
     # Now the computation.
     scope = vs.get_variable_scope()
     with vs.variable_scope(scope) as outer_scope:
-        weights = vs.get_variable(
-            _WEIGHTS_VARIABLE_NAME, [total_arg_size, output_size], dtype=dtype)
+        proj_weights = vs.get_variable(
+            "proj_weights", [total_arg_size, rank], dtype=dtype)
+        anti_proj_weights = vs.get_variable(
+            "anti_proj_weights", [rank, output_size], dtype=dtype)
         if len(args) == 1:
-            res = math_ops.matmul(args[0], weights)
+            res = math_ops.matmul(math_ops.matmul(args[0], proj_weights), anti_proj_weights)
         else:
-            res = math_ops.matmul(array_ops.concat(args, 1), weights)
+            res = math_ops.matmul(math_ops.matmul(array_ops.concat(args, 1), proj_weights), anti_proj_weights)
         if not bias:
             return res
         with vs.variable_scope(outer_scope) as inner_scope:
@@ -117,7 +118,7 @@ class FactorizedLSTMCell(RNNCell):
   an optional projection layer.
   """
 
-  def __init__(self, num_units, input_size=None,
+  def __init__(self, num_units, rank, input_size=None,
                use_peepholes=False, cell_clip=None,
                initializer=None, num_proj=None, proj_clip=None,
                num_unit_shards=None, num_proj_shards=None,
@@ -126,6 +127,7 @@ class FactorizedLSTMCell(RNNCell):
     """Initialize the parameters for an LSTM cell.
     Args:
       num_units: int, The number of units in the LSTM cell
+      rank: int, Rank of the SVD factorized weights
       input_size: Deprecated and unused.
       use_peepholes: bool, set True to enable diagonal/peephole connections.
       cell_clip: (optional) A float value, if provided the cell state is clipped
@@ -164,6 +166,7 @@ class FactorizedLSTMCell(RNNCell):
           "Use a variable scope with a partitioner instead.", self)
 
     self._num_units = num_units
+    self._rank = rank
     self._use_peepholes = use_peepholes
     self._cell_clip = cell_clip
     self._initializer = initializer
@@ -237,7 +240,9 @@ class FactorizedLSTMCell(RNNCell):
             partitioned_variables.fixed_size_partitioner(
                 self._num_unit_shards))
       # i = input_gate, j = new_input, f = forget_gate, o = output_gate
-      lstm_matrix = _linear([inputs, m_prev], 4 * self._num_units, bias=True)
+      input_contributions = _linear([inputs], 4 * self._num_units, bias=True)
+      mprev_contributions = _factorized_linear([m_prev], 4 * self._num_units, rank=self._rank, bias=True)
+      lstm_matrix = input_contributions + mprev_contributions
       i, j, f, o = array_ops.split(
           value=lstm_matrix, num_or_size_splits=4, axis=1)
       # Diagonal connections

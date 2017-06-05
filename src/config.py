@@ -58,6 +58,8 @@ class Config(argparse.Namespace):
 
     model = "basic", "Can be basic or quantized"
 
+    svd_rank = 28
+
     # Define derived parameters as properties
     @property
     def num_final_features(self):
