@@ -179,13 +179,13 @@ def test_model(config):
     
 def main():
     config = Config()
-    config.save('config.json')
-    print(config)
     if config.phase == 'train':
+        config.save(os.path.join(os.path.dirname(config.save_to_file), 'config.json'))
         train_model(config)
     elif config.phase == 'test':
         test_model(config)
     elif config.phase == 'factorize':
+        config.save(os.path.join(os.path.dirname(config.save_to_file), 'config.json'))
         factorized.factorize(config)
     else:
         raise Exception('unknown phase %r' % config.phase)

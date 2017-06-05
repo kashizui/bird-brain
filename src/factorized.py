@@ -1,3 +1,6 @@
+import os
+import re
+
 import tensorflow as tf
 import numpy as np
 
@@ -95,6 +98,13 @@ def svd_truncate(X, r):
     return Z, P
 
 
+def pick_variable(name):
+    try:
+        return next(v for v in tf.global_variables() if v.name == name)
+    except StopIteration:
+        raise KeyError('variable %r not found' % name)
+
+
 def factorize(config):
     """
 
@@ -107,7 +117,7 @@ def factorize(config):
 
     # Load the original model to extract the weights and compute the factorized weights
     with tf.Graph().as_default() as g_original:
-        with tf.Session() as session:
+        with tf.Session(graph=g_original) as session:
             if config.load_from_file is None:
                 raise Exception('specify model with --load-from-file')
             saver = tf.train.import_meta_graph('%s.meta' % config.load_from_file, clear_devices=True)
@@ -136,20 +146,36 @@ def factorize(config):
             # recurrent projection matrix for forward RNN
             Z_fw_recurrent, P_fw = svd_truncate(w_fw_recurrent, r=config.svd_rank)
             Z_bw_recurrent, P_bw = svd_truncate(w_bw_recurrent, r=config.svd_rank)
+            print('Z_fw_recurrent.shape =', Z_fw_recurrent.shape)
+            print('Z_bw_recurrent.shape =', Z_bw_recurrent.shape)
 
-            # Compute least-squares
-            
+            # TODO: Compute least-squares
 
 
     # Instantiate a factorized version of the model
     with tf.Graph().as_default() as g_factorized:
         model = FactorizedCTCModel(config)
-        variables_to_restore = {v.name for v in tf.global_variables()}
-        variables_to_restore.remove("bidirectional_rnn/fw/lstm_cell/proj_weights:0")
-        variables_to_restore.remove("bidirectional_rnn/fw/lstm_cell/anti_proj_weights:0")
-        restorer = tf.train.Saver([v for v in tf.global_variables() if v.name in variables_to_restore])
+        variables_to_restore = [v for v in tf.global_variables()
+                                if not re.match(r"bidirectional_rnn/[fb]w/lstm_cell/((anti_)?proj_)?weights(.*)", v.name)]
+        restorer = tf.train.Saver(variables_to_restore)
+        saver = tf.train.Saver(tf.global_variables())
 
-    # Load the weights from the original model into the new factorized graph
-    # And manually load in the factorized weights computed above
-    with tf.Session(graph=g_factorized) as session:
-        restorer.restore(session, config.load_from_file)
+        # Load the weights from the original model into the new factorized graph
+        # TODO: and manually load in the factorized weights computed above
+        with tf.Session(graph=g_factorized) as session:
+            session.run(tf.global_variables_initializer())
+            restorer.restore(session, config.load_from_file)
+            for v in tf.global_variables():
+                print(v.name)
+
+            pick_variable("bidirectional_rnn/fw/lstm_cell/weights:0").load(w_fw_cell[:num_units, :])
+            pick_variable("bidirectional_rnn/fw/lstm_cell/proj_weights:0").load(P_fw.T)
+            pick_variable("bidirectional_rnn/fw/lstm_cell/anti_proj_weights:0").load(Z_fw_recurrent.T)
+
+            pick_variable("bidirectional_rnn/bw/lstm_cell/weights:0").load(w_bw_cell[:num_units, :])
+            pick_variable("bidirectional_rnn/bw/lstm_cell/proj_weights:0").load(P_bw.T)
+            pick_variable("bidirectional_rnn/bw/lstm_cell/anti_proj_weights:0").load(Z_bw_recurrent.T)
+
+            os.makedirs(os.path.dirname(config.save_to_file), exist_ok=True)
+            saver.save(session, config.save_to_file)
+

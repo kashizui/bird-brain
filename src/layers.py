@@ -241,7 +241,7 @@ class FactorizedLSTMCell(RNNCell):
                 self._num_unit_shards))
       # i = input_gate, j = new_input, f = forget_gate, o = output_gate
       input_contributions = _linear([inputs], 4 * self._num_units, bias=True)
-      mprev_contributions = _factorized_linear([m_prev], 4 * self._num_units, rank=self._rank, bias=True)
+      mprev_contributions = _factorized_linear([m_prev], 4 * self._num_units, rank=self._rank, bias=False)
       lstm_matrix = input_contributions + mprev_contributions
       i, j, f, o = array_ops.split(
           value=lstm_matrix, num_or_size_splits=4, axis=1)

@@ -5,6 +5,7 @@ import os
 import warnings
 
 from basic_model import CTCModel, CTCModelNoSum
+from factorized import FactorizedCTCModel
 from quantized_model import QuantizedCTCModel
 from layers import leaky_relu, clipped_relu
 
@@ -79,8 +80,10 @@ class Config(argparse.Namespace):
             return CTCModel(self)
         if self.model == 'nosum':
             return CTCModelNoSum(self)
-        elif self.model == 'quantized':
+        if self.model == 'quantized':
             return QuantizedCTCModel(self)
+        if self.model == 'factorized':
+            return FactorizedCTCModel(self)
         raise Exception('unknown model type %r' % (self.model,))
 
     #########################
@@ -147,5 +150,6 @@ class Config(argparse.Namespace):
         """Save config to JSON file."""
         if os.path.exists(path):
             warnings.warn('Overwriting config at %s' % path)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, 'w') as fp:
             json.dump(vars(self), fp)
