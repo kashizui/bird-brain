@@ -124,6 +124,9 @@ if __name__ == "__main__":
     parser.add_argument("mfcc_path", type=str, help="Path to corpus")
     parser.add_argument('--phone', action='store_true')
     args = parser.parse_args()
-    str_to_index = construct_string_to_index_mapping()
+    if args.phone:
+        str_to_index = construct_string_to_index_mapping()
+    else:
+        str_to_index = construct_char_string_to_index_mapping()
     make_train(args.mfcc_path, args.phone)
     make_test(args.mfcc_path, args.phone)
