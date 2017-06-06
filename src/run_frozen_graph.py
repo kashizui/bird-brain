@@ -13,7 +13,7 @@ def print_predicted(pred):
     inv_index_mapping = {v: k for k, v in
                          construct_string_to_index_mapping().items()}
     predicted_label = "".join(
-            [inv_index_mapping[int(ch)] for ch in pred if ch != -1])
+            [inv_index_mapping[ch] for ch in pred if ch != -1])
 
     print("Predicted: {}\n".format(predicted_label))
                                                       
@@ -56,11 +56,12 @@ if __name__ == '__main__':
 
     with tf.Session(graph=graph) as session:
         for i in range(len(features)):
+            label = list(map(int, labels[i]))
             output_phones = perform_inference(session, [features[i]], [seqlens[i]])
-            ed = editdistance.eval(output_phones, labels[i]) / len(labels[i])
+            ed = editdistance.eval(output_phones, label) / len(label)
             total_test_wer += ed
             if i % args.print_every == 0:
                 print_predicted(output_phones)
-                print_predicted(labels[i])
+                print_predicted(label)
     wer = total_test_wer / float(len(features))
     print(wer)
