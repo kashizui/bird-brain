@@ -1,21 +1,8 @@
 import tensorflow as tf
-import collections
-import contextlib
-import hashlib
-import math
-import numbers
 
-from tensorflow.python.framework import ops
-from tensorflow.python.framework import tensor_shape
-from tensorflow.python.framework import tensor_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import clip_ops
-from tensorflow.python.ops import embedding_ops
-from tensorflow.python.ops import init_ops
-from tensorflow.python.ops import math_ops
-from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import partitioned_variables
-from tensorflow.python.ops import random_ops
 from tensorflow.python.ops import variable_scope as vs
 
 from tensorflow.python.ops.math_ops import sigmoid
@@ -24,13 +11,33 @@ from tensorflow.python.ops.rnn_cell_impl import _RNNCell as RNNCell
 from tensorflow.contrib.rnn.python.ops.core_rnn_cell_impl import (
     _checked_scope,
     _linear,
-    _BIAS_VARIABLE_NAME,
     LSTMStateTuple,
 )
 
 from tensorflow.python.platform import tf_logging as logging
-from tensorflow.python.util import nest
 
+
+def dense(inputs, output_size, activation=None, bias=True):
+    # inputs.shape = [batch_s, max_timestep, input_size]
+    input_size = inputs.shape.as_list()[2]
+    inputs_shape = tf.shape(inputs)  # get shape at runtime as well for batch_s and max_timestep
+
+    W = tf.get_variable('W', shape=[input_size, output_size], initializer=tf.contrib.layers.xavier_initializer())
+    if bias:
+        b = tf.get_variable('b', shape=[output_size])
+
+    # Flatten the sequence into a long matrix and apply affine transform
+    inputs_flat = tf.reshape(inputs, [-1, input_size])      # shape = [batch_s * max_timestep, input_size]
+    if bias:
+        outputs_flat = tf.matmul(inputs_flat, W) + b            # shape = [batch_s * max_timestep, output_size]
+    else:
+        outputs_flat = tf.matmul(inputs_flat, W)                # shape = [batch_s * max_timestep, output_size]
+    outputs = tf.reshape(outputs_flat, [inputs_shape[0], inputs_shape[1], output_size])  # shape = [batch_s, max_timestep, output_size]
+
+    if activation is not None:
+        outputs = activation(outputs)
+
+    return outputs
 
 
 def leaky_relu(alpha):
@@ -44,63 +51,6 @@ def clipped_relu(mu):
     def apply(inputs):
         return tf.minimum(tf.maximum(inputs, 0), mu)
     return apply
-
-
-def _factorized_linear(args, output_size, rank, bias, bias_start=0.0):
-    """Linear map: sum_i(args[i] * Z[i] * P[i]), where W[i] is a variable.
-
-    Args:
-      args: a 2D Tensor or a list of 2D, batch x n, Tensors.
-      output_size: int, second dimension of W[i].
-      bias: boolean, whether to add a bias term or not.
-      bias_start: starting value to initialize the bias; 0 by default.
-
-    Returns:
-      A 2D Tensor with shape [batch x output_size] equal to
-      sum_i(args[i] * W[i]), where W[i]s are newly created matrices.
-
-    Raises:
-      ValueError: if some of the arguments has unspecified or wrong shape.
-    """
-    if args is None or (nest.is_sequence(args) and not args):
-        raise ValueError("`args` must be specified")
-    if not nest.is_sequence(args):
-        args = [args]
-
-    # Calculate the total size of arguments on dimension 1.
-    total_arg_size = 0
-    shapes = [a.get_shape() for a in args]
-    for shape in shapes:
-        if shape.ndims != 2:
-            raise ValueError("linear is expecting 2D arguments: %s" % shapes)
-        if shape[1].value is None:
-            raise ValueError("linear expects shape[1] to be provided for shape %s, "
-                             "but saw %s" % (shape, shape[1]))
-        else:
-            total_arg_size += shape[1].value
-
-    dtype = [a.dtype for a in args][0]
-
-    # Now the computation.
-    scope = vs.get_variable_scope()
-    with vs.variable_scope(scope) as outer_scope:
-        proj_weights = vs.get_variable(
-            "proj_weights", [total_arg_size, rank], dtype=dtype)
-        anti_proj_weights = vs.get_variable(
-            "anti_proj_weights", [rank, output_size], dtype=dtype)
-        if len(args) == 1:
-            res = math_ops.matmul(math_ops.matmul(args[0], proj_weights), anti_proj_weights)
-        else:
-            res = math_ops.matmul(math_ops.matmul(array_ops.concat(args, 1), proj_weights), anti_proj_weights)
-        if not bias:
-            return res
-        with vs.variable_scope(outer_scope) as inner_scope:
-            inner_scope.set_partitioner(None)
-            biases = vs.get_variable(
-                _BIAS_VARIABLE_NAME, [output_size],
-                dtype=dtype,
-                initializer=init_ops.constant_initializer(bias_start, dtype=dtype))
-        return nn_ops.bias_add(res, biases)
 
 
 class FactorizedLSTMCell(RNNCell):
@@ -118,7 +68,7 @@ class FactorizedLSTMCell(RNNCell):
   an optional projection layer.
   """
 
-  def __init__(self, num_units, rank, input_size=None,
+  def __init__(self, num_units, input_size=None,
                use_peepholes=False, cell_clip=None,
                initializer=None, num_proj=None, proj_clip=None,
                num_unit_shards=None, num_proj_shards=None,
@@ -127,7 +77,6 @@ class FactorizedLSTMCell(RNNCell):
     """Initialize the parameters for an LSTM cell.
     Args:
       num_units: int, The number of units in the LSTM cell
-      rank: int, Rank of the SVD factorized weights
       input_size: Deprecated and unused.
       use_peepholes: bool, set True to enable diagonal/peephole connections.
       cell_clip: (optional) A float value, if provided the cell state is clipped
@@ -166,7 +115,6 @@ class FactorizedLSTMCell(RNNCell):
           "Use a variable scope with a partitioner instead.", self)
 
     self._num_units = num_units
-    self._rank = rank
     self._use_peepholes = use_peepholes
     self._cell_clip = cell_clip
     self._initializer = initializer
@@ -181,8 +129,8 @@ class FactorizedLSTMCell(RNNCell):
 
     if num_proj:
       self._state_size = (
-          LSTMStateTuple(num_units, num_proj)
-          if state_is_tuple else num_units + num_proj)
+          LSTMStateTuple(num_units, num_units)
+          if state_is_tuple else 2 * num_units)
       self._output_size = num_proj
     else:
       self._state_size = (
@@ -220,13 +168,13 @@ class FactorizedLSTMCell(RNNCell):
       ValueError: If input size cannot be inferred from inputs via
         static shape inference.
     """
-    num_proj = self._num_units if self._num_proj is None else self._num_proj
-
     if self._state_is_tuple:
       (c_prev, m_prev) = state
     else:
       c_prev = array_ops.slice(state, [0, 0], [-1, self._num_units])
-      m_prev = array_ops.slice(state, [0, self._num_units], [-1, num_proj])
+      m_prev = array_ops.slice(state, [0, self._num_units], [-1, self._num_units])
+
+
 
     dtype = inputs.dtype
     input_size = inputs.get_shape().with_rank(2)[1]
@@ -241,7 +189,10 @@ class FactorizedLSTMCell(RNNCell):
                 self._num_unit_shards))
       # i = input_gate, j = new_input, f = forget_gate, o = output_gate
       input_contributions = _linear([inputs], 4 * self._num_units, bias=True)
-      mprev_contributions = _factorized_linear([m_prev], 4 * self._num_units, rank=self._rank, bias=False)
+      with tf.variable_scope('projection'):
+          mprev_projected = _linear([m_prev], self._num_proj, bias=False)
+      with tf.variable_scope('antiprojection'):
+          mprev_contributions = _linear([mprev_projected], 4 * self._num_units, bias=False)
       lstm_matrix = input_contributions + mprev_contributions
       i, j, f, o = array_ops.split(
           value=lstm_matrix, num_or_size_splits=4, axis=1)
@@ -274,18 +225,21 @@ class FactorizedLSTMCell(RNNCell):
         m = sigmoid(o) * self._activation(c)
 
       if self._num_proj is not None:
-        with vs.variable_scope("projection") as proj_scope:
+        with vs.variable_scope("projection", reuse=True) as proj_scope:
           if self._num_proj_shards is not None:
             proj_scope.set_partitioner(
                 partitioned_variables.fixed_size_partitioner(
                     self._num_proj_shards))
-          m = _linear(m, self._num_proj, bias=False)
+          out = _linear(m, self._num_proj, bias=False)
 
         if self._proj_clip is not None:
           # pylint: disable=invalid-unary-operand-type
-          m = clip_ops.clip_by_value(m, -self._proj_clip, self._proj_clip)
+          out = clip_ops.clip_by_value(out, -self._proj_clip, self._proj_clip)
           # pylint: enable=invalid-unary-operand-type
+      else:
+        out = m
 
     new_state = (LSTMStateTuple(c, m) if self._state_is_tuple else
                  array_ops.concat([c, m], 1))
-    return m, new_state
+
+    return out, new_state

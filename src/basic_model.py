@@ -13,31 +13,14 @@ from six.moves import xrange as range
 # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
 
+import layers
+
 
 class CTCModel(Model):
     """
     Implements a recursive neural network with a single hidden layer attached to CTC loss.
     This network will predict a sequence of TIMIT (e.g. z1039) for a given audio wav file.
     """
-
-    def apply_affine_over_sequence(self, inputs, output_size, activation=None):
-        # inputs.shape = [batch_s, max_timestep, input_size]
-        input_size = inputs.shape.as_list()[2]
-        inputs_shape = tf.shape(inputs)  # get shape at runtime as well for batch_s and max_timestep
-
-        W = tf.get_variable('W', shape=[input_size, output_size], initializer=tf.contrib.layers.xavier_initializer())
-        b = tf.get_variable('b', shape=[output_size])
-
-        # Flatten the sequence into a long matrix and apply affine transform
-        inputs_flat = tf.reshape(inputs, [-1, input_size])      # shape = [batch_s * max_timestep, input_size]
-        outputs_flat = tf.matmul(inputs_flat, W) + b            # shape = [batch_s * max_timestep, output_size]
-        outputs = tf.reshape(outputs_flat, [inputs_shape[0], inputs_shape[1], output_size])  # shape = [batch_s, max_timestep, output_size]
-
-        if activation is not None:
-            outputs = activation(outputs)
-
-        return outputs
-
     def add_prediction_op(self):
         """Applies a GRU RNN over the input data, then an affine layer projection. Steps to complete
         in this function:
@@ -55,8 +38,8 @@ class CTCModel(Model):
         # Non-recurrent hidden layers
         inputs = self.inputs_placeholder
         for i in range(self.config.num_hidden_layers):
-            with tf.variable_scope('hidden%d' % (i+1)) as vs:
-                inputs = self.apply_affine_over_sequence(
+            with tf.variable_scope('hidden%d' % (i + 1)) as vs:
+                inputs = layers.dense(
                     inputs=inputs,
                     output_size=self.config.hidden_size,
                     activation=tf.nn.relu)
@@ -78,14 +61,14 @@ class CTCModel(Model):
             dtype=tf.float32,
             sequence_length=self.seq_lens_placeholder)
 
-        # Sum the forward and backward hidden states together for the scores
-        # scores.shape = [batch_s, max_timestep, num_hidden]
-        scores = tf.add(rnn_outputs[0], rnn_outputs[1], name='scores')
+        # Concatenate the forward and backward hidden states together for the scores
+        # scores.shape = [batch_s, max_timestep, 2*num_hidden]
+        scores = tf.concat([rnn_outputs[0], rnn_outputs[1]], axis=2, name='scores')
 
         # Push the scores through an affine layer
         # logits.shape = [batch_s, max_timestep, num_classes]
         with tf.variable_scope('final') as vs:
-            self.logits = self.apply_affine_over_sequence(
+            self.logits = layers.dense(
                 inputs=scores,
                 output_size=self.config.num_classes)
 
@@ -118,63 +101,6 @@ class CTCModel(Model):
         return batch_cost, wer, summary
 
     def __init__(self, config):
+        super().__init__(config)
         self.config = config
         self.build()
-
-
-class CTCModelNoSum(CTCModel):
-    """
-    Implements a recursive neural network with a single hidden layer attached to CTC loss.
-    This network will predict a sequence of TIMIT (e.g. z1039) for a given audio wav file.
-    """
-
-    def add_prediction_op(self):
-        """Applies a GRU RNN over the input data, then an affine layer projection. Steps to complete
-        in this function:
-
-        - Roll over inputs_placeholder with GRUCell, producing a Tensor of shape [batch_s, max_timestep,
-          hidden_size].
-        - Apply a W * f + b transformation over the data, where f is each hidden layer feature. This
-          should produce a Tensor of shape [batch_s, max_timesteps, num_classes]. Set this result to
-          "logits".
-
-        Remember:
-            * Use the xavier initialization for matrices (W, but not b).
-            * W should be shape [hidden_size, num_classes].
-        """
-        # Non-recurrent hidden layers
-        inputs = self.inputs_placeholder
-        for i in range(self.config.num_hidden_layers):
-            with tf.variable_scope('hidden%d' % (i + 1)) as vs:
-                inputs = self.apply_affine_over_sequence(
-                    inputs=inputs,
-                    output_size=self.config.hidden_size,
-                    activation=tf.nn.relu)
-
-        # Construct forward and backward cells of bidirectional RNN
-        construct_cell = getattr(tf.contrib.rnn, self.config.cell_type)
-        fwdcell = construct_cell(
-            self.config.hidden_size,
-            activation=self.config.activation_func,
-        )
-        bckcell = construct_cell(
-            self.config.hidden_size,
-            activation=self.config.activation_func,
-        )
-        # TODO: look into non-zero initial hidden states?
-        rnn_outputs, rnn_last_states = tf.nn.bidirectional_dynamic_rnn(
-            fwdcell, bckcell,
-            inputs=inputs,
-            dtype=tf.float32,
-            sequence_length=self.seq_lens_placeholder)
-
-        # Sum the forward and backward hidden states together for the scores
-        # scores.shape = [batch_s, max_timestep, 2*num_hidden]
-        scores = tf.concat([rnn_outputs[0], rnn_outputs[1]], axis=2, name='scores')
-
-        # Push the scores through an affine layer
-        # logits.shape = [batch_s, max_timestep, num_classes]
-        with tf.variable_scope('final') as vs:
-            self.logits = self.apply_affine_over_sequence(
-                inputs=scores,
-                output_size=self.config.num_classes)

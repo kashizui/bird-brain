@@ -12,8 +12,8 @@
 
 IMAGE_VERSION=$(cat DOCKERIMAGEVERSION)
 IMAGE_NAME="sckoo/bird-brain:v$IMAGE_VERSION"
-DATA_BUNDLE=data26
-SRC_BUNDLE=src26
+DATA_BUNDLE=datafullphone
+SRC_BUNDLE=src
 OPTIONS=""
 DEPENDENCIES=""
 RUNARGS=""
@@ -44,7 +44,7 @@ done
 # Ensure we're on the right worksheet
 cl work main::bird-brain >/dev/null
 
-# Re-upload src if it's newer than the last uploaded bundle named "src"
+# Re-upload src if it's newer than the last uploaded bundle named $SRC_BUNDLE
 last_uploaded=$(date -r $(cl info -f created $SRC_BUNDLE) "+%Y%m%d%H%M")
 touch -t $last_uploaded .last_uploaded
 if [[ $(find src -newer .last_uploaded | wc -c) -ne 0 ]]; then
