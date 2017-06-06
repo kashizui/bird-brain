@@ -4,7 +4,7 @@ import json
 import os
 import warnings
 
-from basic_model import CTCModel, CTCModelNoSum
+from basic_model import CTCModel
 from factorized import FactorizedCTCModel
 from quantized_model import QuantizedCTCModel
 from layers import leaky_relu, clipped_relu
@@ -79,7 +79,8 @@ class Config(argparse.Namespace):
         if self.model == 'basic':
             return CTCModel(self)
         if self.model == 'nosum':
-            return CTCModelNoSum(self)
+            warnings.warn('CTCModelNoSum has been merged into CTCModel.')
+            return CTCModel(self)
         if self.model == 'quantized':
             return QuantizedCTCModel(self)
         if self.model == 'factorized':
