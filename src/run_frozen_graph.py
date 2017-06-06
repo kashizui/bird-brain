@@ -1,7 +1,8 @@
 import tensorflow as tf
 import argparse
-from utils import load_dataset, pad_sequences
-from data import construct_string_to_index_mapping
+from utils import load_dataset, pad_sequences, compute_wer
+from data import construct_char_string_to_index_mapping as construct_string_to_index_mapping
+import editdistance
 
 def pad_all_batches(batch_feature_array):
     for batch_num in range(len(batch_feature_array)):
@@ -49,8 +50,15 @@ if __name__ == '__main__':
     decode_sequence = graph.get_tensor_by_name('prefix/DecodedSequence:0')
     
     features, labels, seqlens = load_dataset('./data/train/train.dat')
-    
+    total_test_wer = 0
+
     with tf.Session(graph=graph) as session:
-        output_phones = perform_inference(session, [features[0]], [seqlens[0]])
-        print_predicted(output_phones)
-        print_predicted(labels[0])
+        for i in range(len(features)):
+            output_phones = perform_inference(session, [features[i]], [seqlens[i]])
+            ed = editdistance.eval(output_phones, labels[i]) / len(labels[i])
+            total_test_wer += ed
+            if i % 1000 == 0:
+                print_predicted(output_phones)
+                print_predicted(labels[i])
+    wer = total_test_wer / float(len(features))
+    print(wer)
