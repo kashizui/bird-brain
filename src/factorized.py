@@ -14,25 +14,6 @@ class FactorizedCTCModel(CTCModel):
     This network will predict a sequence of TIMIT (e.g. z1039) for a given audio wav file.
     """
 
-    def _project_final(self, inputs, output_size, P, bias=True):
-        # inputs.shape = [batch_s, max_timestep, input_size]
-        input_size = inputs.shape.as_list()[2]
-        inputs_shape = tf.shape(inputs)  # get shape at runtime as well for batch_s and max_timestep
-
-        Z = tf.get_variable('Z', shape=[input_size, output_size], initializer=tf.contrib.layers.xavier_initializer())
-        if bias:
-            b = tf.get_variable('b', shape=[output_size])
-
-        # Flatten the sequence into a long matrix and apply affine transform
-        inputs_flat = tf.reshape(inputs, [-1, input_size])      # shape = [batch_s * max_timestep, input_size]
-        if bias:
-            outputs_flat = tf.matmul(tf.matmul(inputs_flat, P), Z) + b        # shape = [batch_s * max_timestep, output_size]
-        else:
-            outputs_flat = tf.matmul(tf.matmul(inputs_flat, P), Z)            # shape = [batch_s * max_timestep, output_size]
-        outputs = tf.reshape(outputs_flat, [inputs_shape[0], inputs_shape[1], output_size])  # shape = [batch_s, max_timestep, output_size]
-
-        return outputs
-
     def add_prediction_op(self):
         """Applies a GRU RNN over the input data, then an affine layer projection. Steps to complete
         in this function:
@@ -89,17 +70,6 @@ class FactorizedCTCModel(CTCModel):
                     bias=False,
                 )
             self.logits = fw_logits + bw_logits
-
-        # # Sum the forward and backward hidden states together for the scores
-        # # scores.shape = [batch_s, max_timestep, 2*num_hidden]
-        # scores = tf.concat([rnn_outputs[0], rnn_outputs[1]], axis=2, name='scores')
-        #
-        # # Push the scores through an affine layer
-        # # logits.shape = [batch_s, max_timestep, num_classes]
-        # with tf.variable_scope('final') as vs:
-        #     self.logits = self.apply_affine_over_sequence(
-        #         inputs=scores,
-        #         output_size=self.config.num_classes)
 
 # load instance of basic_model and extract weights
 # run SVD to factorize RNN weight matrices
