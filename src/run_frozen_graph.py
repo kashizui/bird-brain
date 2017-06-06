@@ -42,6 +42,8 @@ def perform_inference(session, feature_input, seq_len):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_name", default="models/frozen_model.pb", type=str)
+    parser.add_argument("--path", default='./data/train/train.dat', type=str)
+    parser.add_argument("--print_every", default=500, type=int)
     args = parser.parse_args()
 
     graph = load_graph(args.model_name)
@@ -49,7 +51,7 @@ if __name__ == '__main__':
     seq_lens = graph.get_tensor_by_name('prefix/SeqLenNode:0')
     decode_sequence = graph.get_tensor_by_name('prefix/DecodedSequence:0')
     
-    features, labels, seqlens = load_dataset('./data/train/train.dat')
+    features, labels, seqlens = load_dataset(args.path)
     total_test_wer = 0
 
     with tf.Session(graph=graph) as session:
@@ -57,7 +59,7 @@ if __name__ == '__main__':
             output_phones = perform_inference(session, [features[i]], [seqlens[i]])
             ed = editdistance.eval(output_phones, labels[i]) / len(labels[i])
             total_test_wer += ed
-            if i % 1000 == 0:
+            if i % args.print_every == 0:
                 print_predicted(output_phones)
                 print_predicted(labels[i])
     wer = total_test_wer / float(len(features))
