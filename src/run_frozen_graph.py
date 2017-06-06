@@ -1,7 +1,7 @@
 import tensorflow as tf
 import argparse
 from utils import load_dataset, pad_sequences, compute_wer
-from data import construct_char_string_to_index_mapping as construct_string_to_index_mapping
+from data import construct_string_to_index_mapping
 import editdistance
 
 def pad_all_batches(batch_feature_array):
@@ -13,7 +13,7 @@ def print_predicted(pred):
     inv_index_mapping = {v: k for k, v in
                          construct_string_to_index_mapping().items()}
     predicted_label = "".join(
-            [inv_index_mapping[ch] for ch in pred if ch != -1])
+            [inv_index_mapping[int(ch)] for ch in pred if ch != -1])
 
     print("Predicted: {}\n".format(predicted_label))
                                                       
