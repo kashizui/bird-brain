@@ -3,6 +3,7 @@ import argparse
 from utils import load_dataset, pad_sequences, compute_wer
 from data import construct_string_to_index_mapping
 import editdistance
+import json
 
 def pad_all_batches(batch_feature_array):
     for batch_num in range(len(batch_feature_array)):
@@ -64,4 +65,11 @@ if __name__ == '__main__':
                 print_predicted(output_phones)
                 print_predicted(label)
     wer = total_test_wer / float(len(features))
+
+    # Write out status to JSON for CodaLab table display
+    with open('status.json', 'w') as fp:
+        json.dump({
+            'test_ed': float(ed),
+            'test_wer': float(wer),
+        }, fp)
     print(wer)

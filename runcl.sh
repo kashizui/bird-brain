@@ -49,7 +49,9 @@ last_uploaded=$(date -r $(cl info -f created $SRC_BUNDLE) "+%Y%m%d%H%M")
 touch -t $last_uploaded .last_uploaded
 if [[ $(find src -newer .last_uploaded | wc -c) -ne 0 ]]; then
     echo "Changes found since src (=>$SRC_BUNDLE) was last uploaded..."
-    cl upload src -n $SRC_BUNDLE
+    command="cl upload src -n $SRC_BUNDLE"
+    echo $command
+    $command
 fi
 rm .last_uploaded
 
